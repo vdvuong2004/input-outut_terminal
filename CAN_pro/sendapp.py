@@ -1,8 +1,9 @@
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, send_file
 import serial
 import threading
 import time
 import xml.etree.ElementTree as ET
+import os
 
 app = Flask(__name__, static_url_path='')
 
@@ -43,13 +44,14 @@ def index():
 @app.route('/send', methods=['POST'])
 def send():
     global ser, running
+    if ser is None or not ser.is_open:
+        return jsonify({'error': 'Serial not connected'}), 400
     try:
         data = request.json
         print("Received data:", data)
         model = data['model']
         id_str = data['id']
         data_str = data['data']
-        mode = data['mode']
         cyclics = float(data['cyclics']) / 1000.0
         baudrate = int(data['baudrate'])
 
@@ -59,7 +61,7 @@ def send():
         if ser is None or not ser.is_open or ser.baudrate != baudrate:
             if ser:
                 ser.close()
-            ser = serial.Serial('COM6', baudrate, timeout=1)
+            ser = serial.Serial('COM7', baudrate, timeout=1)
 
         if cyclics == 0:
             ser.write(frame)
@@ -80,16 +82,17 @@ def send():
 @app.route('/send_all', methods=['POST'])
 def send_all():
     global ser
+    if ser is None or not ser.is_open:
+        return jsonify({'error': 'Serial not connected'}), 400
     data = request.json
     rows = data['list']
-    mode = data['mode']
     cyclics = data['cyclics'] / 1000.0
     baudrate = data['baudrate']
 
     if ser is None or not ser.is_open or ser.baudrate != baudrate:
         if ser:
             ser.close()
-        ser = serial.Serial('COM6', baudrate, timeout=1)
+        ser = serial.Serial('COM7', baudrate, timeout=1)
 
     def loop():
         for row in rows:
@@ -131,7 +134,6 @@ def save_to_xml(filename='can_data.xml'):
     ET.SubElement(frame, 'ID').text = data['id']
     ET.SubElement(frame, 'Data').text = data['data']
     ET.SubElement(frame, 'Description').text = data.get('description', '')
-    ET.SubElement(frame, 'Mode').text = str(data['mode'])
     ET.SubElement(frame, 'Cyclics').text = str(data['cyclics'])
     ET.SubElement(frame, 'Baudrate').text = str(data['baudrate'])
 
@@ -147,13 +149,12 @@ def get_data():
         data = []
         for frame in root.findall('Frame'):
             item = {
-                'model': frame.find('Model').text,
                 'id': frame.find('ID').text,
                 'data': frame.find('Data').text,
+                'model': frame.find('Model').text,
                 'description': frame.find('Description').text if frame.find('Description') is not None else '',
-                'mode': frame.find('Mode').text,
-                'cyclics': frame.find('Cyclics').text,
-                'baudrate': frame.find('Baudrate').text
+                'cyclics': frame.find('Cyclics').text if frame.find('Cyclics') is not None else '',
+                'baudrate': frame.find('Baudrate').text if frame.find('Baudrate') is not None else ''
             }
             data.append(item)
         return jsonify(data)
@@ -198,6 +199,50 @@ def delete_all():
         tree = ET.ElementTree(root)
         tree.write(filename, encoding='utf-8', xml_declaration=True)
         return jsonify({'status': 'all deleted'})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/export_xml', methods=['GET'])
+def export_xml():
+    filename = 'can_data.xml'
+    if os.path.exists(filename):
+        return send_file(filename, as_attachment=True)
+    else:
+        return jsonify({'error': 'File not found'}), 404
+
+@app.route('/import_xml', methods=['POST'])
+def import_xml():
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file part'}), 400
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'No selected file'}), 400
+    file.save('can_data.xml')
+    return jsonify({'status': 'imported'})
+
+@app.route('/connect_serial', methods=['POST'])
+def connect_serial():
+    global ser
+    data = request.json
+    port = data.get('port', 'COM7')
+    baudrate = int(data.get('baudrate', 9600))
+    try:
+        if ser and ser.is_open:
+            ser.close()
+        ser = serial.Serial(port, baudrate, timeout=1)
+        return jsonify({'status': 'connected'})
+    except Exception as e:
+        ser = None
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/disconnect_serial', methods=['POST'])
+def disconnect_serial():
+    global ser
+    try:
+        if ser and ser.is_open:
+            ser.close()
+        ser = None
+        return jsonify({'status': 'disconnected'})
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
