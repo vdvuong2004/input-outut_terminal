@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>UART CAN Sender</title>
+  <style>
+    body { font-family: Arial; padding: 20px; background: #f0f0f0; }
+    input, select, button { margin: 5px; padding: 5px; }
+    table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: center; }
+    .led {
+      display: inline-block;
+      width: 20px; height: 20px;
+      border-radius: 50%;
+      margin-left: 10px;
+      background: red;
+    }
+  </style>
+</head>
+<body>
+  <h2>UART CAN Frame Sender</h2>
+
+  <label>ID (hex):</label>
+  <input type="text" id="id" placeholder="e.g., 1AB">
+
+  <label>Data:</label>
+  <input type="text" id="data" placeholder="hello">
+
+  <label>Description:</label>
+  <input type="text" id="description" placeholder="Description">
+
+  <label>Model:</label>
+  <select id="model">
+    <option value="0">Standard</option>
+    <option value="1">Extended</option>
+  </select>
+
+  <label>Baudrate:</label>
+  <select id="baudrate">
+    <option value="9600">9600</option>
+    <option value="115200">115200</option>
+    <option value="500000">500000</option>
+  </select>
+
+  <label>Send Mode:</label>
+  <select id="mode" onchange="toggleCyclics()">
+    <option value="0">Once</option>
+    <option value="1">Continuous</option>
+  </select>
+
+  <label id="cyclics-label">Cyclics(ms):</label>
+  <input type="number" id="cyclics" value="1000">
+
+  <button onclick="addRow()">Add</button>
+  <button onclick="sendAll()">Send All</button>
+  <button onclick="deleteAll()">Delete All</button>
+
+  <span>LED:</span><span class="led" id="led"></span>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Model</th>
+        <th>ID</th>
+        <th>Data</th>
+        <th>Description</th>
+        <th>Cyclics</th>
+        <th>Baudrate</th>
+        <th>Send</th>
+        <th>Stop</th>
+        <th>Delete</th>
+      </tr>
+    </thead>
+    <tbody id="tableBody"></tbody>
+  </table>
+
+  <script>
+    const led = document.getElementById("led");
+    function setLED(on) {
+      led.style.background = on ? "lime" : "red";
+    }
+
+async function addRow() {
+  const model = document.getElementById("model").value;
+  const id = document.getElementById("id").value.trim();
+  const data = document.getElementById("data").value.trim();
+  const description = document.getElementById("description").value.trim();
+  const baudrate = document.getElementById("baudrate").value;
+  const mode = document.getElementById("mode").value;
+  const cyclics = document.getElementById("cyclics").value;
+
+  if (!id || !data) {
+    alert("Please enter ID and Data");
+    return;
+  }
+
+  // Kiểm tra định dạng hex
+  if (!/^[0-9a-fA-F]+$/.test(id)) {
+    alert("ID must be a hexadecimal number");
+    return;
+  }
+
+  const idValue = parseInt(id, 16);
+
+  if (model == "0" && idValue > 0x7FF) {
+    alert("Standard ID must be 11-bit (max: 0x7FF)");
+    return;
+  }
+
+  if (model == "1" && idValue > 0x1FFFFFFF) {
+    alert("Extended ID must be 29-bit (max: 0x1FFFFFFF)");
+    return;
+  }
+
+  const row = document.createElement("tr");
+  row.innerHTML = `
+    <td>${model == 1 ? 'Extended' : 'Standard'}</td>
+    <td>${id}</td>
+    <td>${data}</td>
+    <td>${description}</td>
+    <td>${cyclics}</td>
+    <td>${baudrate}</td>
+    <td><button onclick="sendRow(this)">Send</button></td>
+    <td>
+      ${(cyclics && cyclics !== "0" && cyclics !== 0)
+        ? '<button onclick="stopRow(this)">Stop</button>'
+        : ''}
+    </td>
+    <td>
+      <button onclick="deleteRow(this)">Delete</button>
+    </td>
+  `;
+  row.dataset.model = model;
+  row.dataset.id = id;
+  row.dataset.data = data;
+  row.dataset.description = description;
+  row.dataset.baudrate = baudrate;
+  row.dataset.cyclics = cyclics;
+  document.getElementById("tableBody").appendChild(row);
+
+  await fetch('/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model, id, data, description, mode, cyclics, baudrate })
+      });
+}
+
+
+    async function sendRow(btn) {
+      const row = btn.parentElement.parentElement;
+      const model = parseInt(row.dataset.model);
+      const id = row.dataset.id;
+      const data = row.dataset.data;
+      const baudrate = parseInt(row.dataset.baudrate) || parseInt(document.getElementById("baudrate").value);
+      const mode = parseInt(document.getElementById("mode").value);
+      const cyclics = parseInt(row.dataset.cyclics) || 0;
+      setLED(true);
+      console.log({ model, id, data, mode, cyclics, baudrate });
+      await fetch('/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model, id, data, mode, cyclics, baudrate })
+      });
+    }
+
+    async function sendAll() {
+      const rows = Array.from(document.querySelectorAll("#tableBody tr")).map(row => ({
+        model: parseInt(row.dataset.model),
+        id: row.dataset.id,
+        data: row.dataset.data
+      }));
+      const baudrate = parseInt(document.getElementById("baudrate").value);
+      const mode = parseInt(document.getElementById("mode").value);
+      const cyclics = parseInt(document.getElementById("cyclics").value);
+      setLED(true);
+      await fetch('/send_all', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ list: rows, mode, cyclics, baudrate })
+      });
+    }
+
+    async function stopSend() {
+      setLED(false);
+      await fetch('/stop');
+    }
+
+    async function loadTable() {
+    const res = await fetch('/get_data');
+    const data = await res.json();
+    const tbody = document.getElementById('tableBody');
+    tbody.innerHTML = '';
+    data.forEach(row => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${row.model == "1" ? "Extended" : "Standard"}</td>
+          <td>${row.id}</td>
+          <td>${row.data}</td>
+          <td>${row.description || ""}</td>
+          <td>${row.cyclics || ""}</td>
+          <td>${row.baudrate || ""}</td>
+          <td><button onclick="sendRow(this)">Send</button></td>
+          <td>
+            ${(row.cyclics && row.cyclics !== "0" && row.cyclics !== 0)
+              ? '<button onclick="stopRow(this)">Stop</button>'
+              : ''}
+          </td>
+          <td><button onclick="deleteRow(this)">Delete</button></td>
+        `;
+        // Gán lại dataset cho từng dòng
+        tr.dataset.model = row.model;
+        tr.dataset.id = row.id;
+        tr.dataset.data = row.data;
+        tr.dataset.description = row.description || "";
+        tr.dataset.baudrate = row.baudrate || "";
+        tr.dataset.cyclics = row.cyclics || "";
+        tbody.appendChild(tr);
+    });
+}
+
+// Gọi hàm khi trang vừa load
+window.onload = function() {
+  loadTable();
+  toggleCyclics();
+};
+
+async function deleteRow(btn) {
+    const tr = btn.parentElement.parentElement;
+    const tds = tr.children;
+    const model = tds[0].innerText === "Extended" ? "1" : "0";
+    const id = tds[1].innerText;
+    const data = tds[2].innerText;
+    const description = tds[3].innerText;
+
+    await fetch('/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model, id, data, description })
+    });
+    // Xóa dòng khỏi bảng
+    tr.remove();
+}
+
+async function deleteAll() {
+    if (confirm("Are you sure you want to delete all frames?")) {
+        await fetch('/delete_all', { method: 'POST' });
+        loadTable();
+    }
+}
+
+async function stopRow(btn) {
+    const tr = btn.parentElement.parentElement;
+    const tds = tr.children;
+    const model = tds[0].innerText === "Extended" ? "1" : "0";
+    const id = tds[1].innerText;
+    const data = tds[2].innerText;
+    const description = tds[3].innerText;
+
+    setLED(false); // Chuyển LED về đỏ
+
+    await fetch('/stop_frame', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model, id, data, description })
+    });
+}
+
+function toggleCyclics() {
+  const mode = document.getElementById("mode").value;
+  const cyclicsInput = document.getElementById("cyclics");
+  const cyclicsLabel = document.getElementById("cyclics-label");
+  if (mode === "1") {
+    cyclicsInput.style.display = "";
+    cyclicsLabel.style.display = "";
+    cyclicsInput.value = 1000;
+  } else {
+    cyclicsInput.style.display = "none";
+    cyclicsLabel.style.display = "none";
+    cyclicsInput.value = 0;
+  }
+}
+  </script>
+</body>
+</html>
