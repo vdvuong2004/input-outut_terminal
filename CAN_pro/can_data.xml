@@ -1,0 +1,2 @@
+<?xml version='1.0' encoding='utf-8'?>
+<CANData><Frame><Model>0</Model><ID>001</ID><Data>hholee</Data><Description>blabla</Description><Cyclics>0</Cyclics><Baudrate>115200</Baudrate></Frame><Frame><Model>0</Model><ID>002</ID><Data>abcde</Data><Description>bloblo</Description><Cyclics>1000</Cyclics><Baudrate>115200</Baudrate></Frame><Frame><Model>0</Model><ID>003</ID><Data>abcdef</Data><Description>blobloblo</Description><Cyclics>5000</Cyclics><Baudrate>115200</Baudrate></Frame></CANData>

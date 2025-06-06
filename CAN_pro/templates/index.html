@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>UART CAN Sender</title>
+  <style>
+    body { font-family: Arial; padding: 20px; background: #f0f0f0; }
+    input, select, button { margin: 5px; padding: 5px; }
+    table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: center; }
+    .led {
+      display: inline-block;
+      width: 20px; height: 20px;
+      border-radius: 50%;
+      margin-left: 10px;
+      background: red;
+    }
+  </style>
+</head>
+<body>
+  <h2>UART CAN Frame Sender</h2>
+
+  <label>ID (hex):</label>
+  <input type="text" id="id" placeholder="e.g., 1AB">
+
+  <label>Data:</label>
+  <input type="text" id="data" placeholder="hello">
+
+  <label>Description:</label>
+  <input type="text" id="description" placeholder="Description">
+
+  <label>Model:</label>
+  <select id="model">
+    <option value="0">Standard</option>
+    <option value="1">Extended</option>
+  </select>
+
+  <label>Serial Port:</label>
+<input type="text" id="serialPort" value="COM10" style="width:70px">
+<label>Baudrate:</label>
+<select id="baudrate">
+  <option value="9600">9600</option>
+  <option value="115200">115200</option>
+  <option value="500000">500000</option>
+</select>
+<button id="connectBtn">Connect</button>
+<span id="connectStatus" style="color:green; font-weight:bold;"></span>
+
+  <label id="cyclics-label">Cyclics(ms):</label>
+  <input type="number" id="cyclics" value="1000">
+
+  <button onclick="addRow()">Add</button>
+  <button onclick="sendAll()">Send All</button>
+  <button onclick="deleteAll()">Delete All</button>
+  <button id="exportBtn">Export XML</button>
+  <input type="file" id="importInput" style="display:none" accept=".xml"/>
+  <button id="importBtn">Import XML</button>
+
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Data</th>
+        <th>Model</th>
+        <th>Description</th>
+        <th>Cyclics</th>
+        <th>Baudrate</th>
+        <th>Send</th>
+        <th>Stop</th>
+        <th>Delete</th>
+        <th>Edit</th> <!-- Thêm cột Edit -->
+      </tr>
+    </thead>
+    <tbody id="tableBody"></tbody>
+  </table>
+ <h3>Received CAN Frames</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Data</th>
+        <th>Timestamp</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody id="receiveTableBody"></tbody>
+  </table>
+
+<script>
+  // ...existing code...
+
+  // Map id to description for received table
+  function getDescriptionById(id) {
+    // Lấy tất cả các dòng gửi để ánh xạ description
+    const rows = document.querySelectorAll("#tableBody tr");
+    for (const row of rows) {
+      if (row.dataset.id && row.dataset.id.toLowerCase() === id.toLowerCase()) {
+        return row.dataset.description || "";
+      }
+    }
+    return "";
+  }
+
+  // Hàm cập nhật bảng nhận dữ liệu
+  async function loadReceiveTable() {
+    // Lấy dữ liệu từ server (bạn cần cung cấp API /get_received_data trả về mảng các frame)
+    const res = await fetch('/get_received_data');
+    const data = await res.json();
+    const tbody = document.getElementById('receiveTableBody');
+    tbody.innerHTML = '';
+    data.forEach(row => {
+      const tr = document.createElement('tr');
+      // Ánh xạ description từ bảng gửi
+      const description = getDescriptionById(row.id);
+      tr.innerHTML = `
+        <td>${row.id}</td>
+        <td>${row.data}</td>
+        <td>${row.timestamp}</td>
+        <td>${description}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  // Gọi loadReceiveTable định kỳ mỗi 1 giây
+  setInterval(loadReceiveTable, 1000);
+
+  // ...existing code...
+  window.onload = function() {
+    loadTable();
+    loadReceiveTable();
+  };
+</script>
+
+
+
+
+
+  <script>
+    async function addRow() {
+  const model = document.getElementById("model").value;
+  const id = document.getElementById("id").value.trim();
+  const data = document.getElementById("data").value.trim();
+  const description = document.getElementById("description").value.trim();
+  const baudrate = document.getElementById("baudrate").value;
+  const cyclics = document.getElementById("cyclics").value;
+
+  if (!id || !data) {
+    alert("Please enter ID and Data");
+    return;
+  }
+
+  // Kiểm tra định dạng hex
+  if (!/^[0-9a-fA-F]+$/.test(id)) {
+    alert("ID must be a hexadecimal number");
+    return;
+  }
+
+  const idValue = parseInt(id, 16);
+
+  if (model == "0" && idValue > 0x7FF) {
+    alert("Standard ID must be 11-bit (max: 0x7FF)");
+    return;
+  }
+
+  if (model == "1" && idValue > 0x1FFFFFFF) {
+    alert("Extended ID must be 29-bit (max: 0x1FFFFFFF)");
+    return;
+  }
+
+  const row = document.createElement("tr");
+  row.innerHTML = `
+    <td>${id}</td>
+    <td>${data}</td>
+    <td>${model == 1 ? 'Extended' : 'Standard'}</td>
+    <td>${description}</td>
+    <td>${cyclics}</td>
+    <td>${baudrate}</td>
+    <td><button onclick="sendRow(this)">Send</button></td>
+    <td>
+      ${(cyclics && cyclics !== "0" && cyclics !== 0)
+        ? '<button onclick="stopRow(this)">Stop</button>'
+        : ''}
+    </td>
+    <td>
+      <button onclick="deleteRow(this)">Delete</button>
+    </td>
+    <td><button onclick="editRow(this)">Edit</button></td>
+  `;
+  row.dataset.model = model;
+  row.dataset.id = id;
+  row.dataset.data = data;
+  row.dataset.description = description;
+  row.dataset.baudrate = baudrate;
+  row.dataset.cyclics = cyclics;
+  document.getElementById("tableBody").appendChild(row);
+
+  await fetch('/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model, id, data, description, cyclics, baudrate })
+      });
+}
+
+
+    async function sendRow(btn) {
+      const row = btn.parentElement.parentElement;
+      const model = parseInt(row.dataset.model);
+      const id = row.dataset.id;
+      const data = row.dataset.data;
+      const baudrate = parseInt(row.dataset.baudrate) || parseInt(document.getElementById("baudrate").value);
+      const cyclics = parseInt(row.dataset.cyclics) || 0;
+      console.log({ model, id, data, cyclics, baudrate });
+      await fetch('/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model, id, data, cyclics, baudrate })
+      });
+    }
+
+    async function sendAll() {
+      const rows = Array.from(document.querySelectorAll("#tableBody tr")).map(row => ({
+        model: parseInt(row.dataset.model),
+        id: row.dataset.id,
+        data: row.dataset.data
+      }));
+      const baudrate = parseInt(document.getElementById("baudrate").value);
+      const cyclics = parseInt(document.getElementById("cyclics").value);
+      await fetch('/send_all', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ list: rows, cyclics, baudrate })
+      });
+    }
+
+    async function stopSend() {
+      await fetch('/stop');
+    }
+
+    function createRowHTML(row, isEdit = false) {
+  if (!isEdit) {
+    return `
+      <td>${row.id}</td>
+      <td>${row.data}</td>
+      <td>${row.model == "1" ? "Extended" : "Standard"}</td>
+      <td>${row.description || ""}</td>
+      <td>${row.cyclics || ""}</td>
+      <td>${row.baudrate || ""}</td>
+      <td><button onclick="sendRow(this)">Send</button></td>
+      <td>
+        ${(row.cyclics && row.cyclics !== "0" && row.cyclics !== 0)
+          ? '<button onclick="stopRow(this)">Stop</button>'
+          : ''}
+      </td>
+      <td><button onclick="deleteRow(this)">Delete</button></td>
+      <td><button onclick="editRow(this)">Edit</button></td>
+    `;
+  } else {
+    return `
+      <td><input value="${row.id}" style="width:60px"/></td>
+      <td><input value="${row.data}" style="width:80px"/></td>
+      <td>
+        <select>
+          <option value="0" ${row.model == "0" ? "selected" : ""}>Standard</option>
+          <option value="1" ${row.model == "1" ? "selected" : ""}>Extended</option>
+        </select>
+      </td>
+      <td><input value="${row.description || ""}" style="width:80px"/></td>
+      <td><input type="number" value="${row.cyclics || ""}" style="width:60px"/></td>
+      <td><input value="${row.baudrate || ""}" style="width:80px"/></td>
+      <td></td>
+      <td></td>
+      <td><button onclick="cancelEdit(this)">Cancel</button></td>
+      <td><button onclick="saveEdit(this)">Save</button></td>
+    `;
+  }
+}
+
+    async function loadTable() {
+      const res = await fetch('/get_data');
+      const data = await res.json();
+      const tbody = document.getElementById('tableBody');
+      tbody.innerHTML = '';
+      data.forEach(row => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = createRowHTML(row);
+        tr.dataset.model = row.model;
+        tr.dataset.id = row.id;
+        tr.dataset.data = row.data;
+        tr.dataset.description = row.description || "";
+        tr.dataset.baudrate = row.baudrate || "";
+        tr.dataset.cyclics = row.cyclics || "";
+        tbody.appendChild(tr);
+      });
+    }
+
+    // Thêm hàm editRow, cancelEdit, saveEdit
+    function editRow(btn) {
+      const tr = btn.parentElement.parentElement;
+      const row = {
+        id: tr.dataset.id,
+        data: tr.dataset.data,
+        model: tr.dataset.model,
+        description: tr.dataset.description,
+        cyclics: tr.dataset.cyclics,
+        baudrate: tr.dataset.baudrate
+      };
+      tr.innerHTML = createRowHTML(row, true);
+    }
+
+    function cancelEdit(btn) {
+      loadTable();
+    }
+
+    async function saveEdit(btn) {
+      const tr = btn.parentElement.parentElement;
+      const tds = tr.children;
+      const id = tds[0].querySelector('input').value.trim();
+      const data = tds[1].querySelector('input').value.trim();
+      const model = tds[2].querySelector('select').value;
+      const description = tds[3].querySelector('input').value.trim();
+      const cyclics = tds[4].querySelector('input').value.trim();
+      const baudrate = tds[5].querySelector('input').value.trim();
+
+      // Validate
+      if (!id || !data) {
+        alert("Please enter ID and Data");
+        return;
+      }
+      if (!/^[0-9a-fA-F]+$/.test(id)) {
+        alert("ID must be a hexadecimal number");
+        return;
+      }
+      const idValue = parseInt(id, 16);
+      if (model == "0" && idValue > 0x7FF) {
+        alert("Standard ID must be 11-bit (max: 0x7FF)");
+        return;
+      }
+      if (model == "1" && idValue > 0x1FFFFFFF) {
+        alert("Extended ID must be 29-bit (max: 0x1FFFFFFF)");
+        return;
+      }
+
+      // Xóa bản ghi cũ (dựa vào id cũ, model cũ, data cũ, description cũ)
+      // Lấy thông tin cũ từ dataset của tr
+      const old = {
+        model: tr.dataset.model,
+        id: tr.dataset.id,
+        data: tr.dataset.data,
+        description: tr.dataset.description
+      };
+      await fetch('/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(old)
+      });
+
+      // Thêm bản ghi mới
+      await fetch('/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model, id, data, description, cyclics, baudrate })
+      });
+
+      loadTable();
+    }
+
+    async function deleteRow(btn) {
+    const tr = btn.parentElement.parentElement;
+    const tds = tr.children;
+    const model = tds[0].innerText === "Extended" ? "1" : "0";
+    const id = tds[1].innerText;
+    const data = tds[2].innerText;
+    const description = tds[3].innerText;
+
+    await fetch('/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model, id, data, description })
+    });
+    // Xóa dòng khỏi bảng
+    tr.remove();
+}
+
+async function deleteAll() {
+    if (confirm("Are you sure you want to delete all frames?")) {
+        await fetch('/delete_all', { method: 'POST' });
+        loadTable();
+    }
+}
+
+async function stopRow(btn) {
+    const tr = btn.parentElement.parentElement;
+    const tds = tr.children;
+    const model = tds[0].innerText === "Extended" ? "1" : "0";
+    const id = tds[1].innerText;
+    const data = tds[2].innerText;
+    const description = tds[3].innerText;
+
+    await fetch('/stop_frame', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model, id, data, description })
+    });
+}
+
+document.getElementById('exportBtn').onclick = function() {
+    window.location.href = '/export_xml';
+};
+
+document.getElementById('importBtn').onclick = function() {
+    document.getElementById('importInput').click();
+};
+
+document.getElementById('importInput').onchange = function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const formData = new FormData();
+    formData.append('file', file);
+    fetch('/import_xml', {
+        method: 'POST',
+        body: formData
+    }).then(res => res.json())
+      .then(data => {
+        alert(data.status || data.error);
+        loadTable(); // Thêm dòng này để reload dữ liệu sau khi import
+      });
+};
+
+let isConnected = false;
+
+document.getElementById('connectBtn').onclick = async function() {
+    const btn = document.getElementById('connectBtn');
+    const status = document.getElementById('connectStatus');
+    if (!isConnected) {
+        // Connect
+        const port = document.getElementById('serialPort').value;
+        const baudrate = document.getElementById('baudrate').value;
+        status.textContent = 'Connecting...';
+        status.style.color = 'orange';
+        const res = await fetch('/connect_serial', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ port, baudrate })
+        });
+        const data = await res.json();
+        if (data.status === 'connected') {
+            status.textContent = 'Connected';
+            status.style.color = 'green';
+            btn.textContent = 'Disconnect';
+            isConnected = true;
+        } else {
+            status.textContent = 'Failed: ' + (data.message || '');
+            status.style.color = 'red';
+            isConnected = false;
+        }
+    } else {
+        // Disconnect
+        status.textContent = 'Disconnecting...';
+        status.style.color = 'orange';
+        const res = await fetch('/disconnect_serial', { method: 'POST' });
+        const data = await res.json();
+        if (data.status === 'disconnected') {
+            status.textContent = 'Disconnected';
+            status.style.color = 'gray';
+            btn.textContent = 'Connect';
+            isConnected = false;
+        } else {
+            status.textContent = 'Failed: ' + (data.message || '');
+            status.style.color = 'red';
+        }
+    }
+};
+
+window.onload = function() {
+  loadTable();
+};
+  </script>
+</body>
+</html>
