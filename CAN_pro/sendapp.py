@@ -49,13 +49,13 @@ def serial_receive_thread():
             time.sleep(0.5)
 
 # Khởi động thread nhận dữ liệu khi app chạy lần đầu
+
 @app.before_request
 def start_receive_thread():
     if not hasattr(app, 'thread_started'):
         t = threading.Thread(target=serial_receive_thread, daemon=True)
         t.start()
         app.thread_started = True
-
 
 @app.route('/get_received_data')
 def get_received_data():
@@ -81,7 +81,7 @@ def get_received_data():
     return jsonify(frames)
 
 # Hàm mã hóa dữ liệu thành frame UART
-def encode_uart_frame(model, id_str, data_str):
+def encode_uart_frame(model, id_str, data_str, cyclics):
     id_val = int(id_str, 16)  # Chuyển ID từ chuỗi hex sang số nguyên
 
     # Kiểm tra giới hạn ID theo loại frame
@@ -102,8 +102,19 @@ def encode_uart_frame(model, id_str, data_str):
     # Độ dài data (1 byte)
     length_byte = len(data_bytes).to_bytes(1, 'big')
 
-    # Ghép tất cả thành frame: [model][id][length][data]
-    frame = bytes([model]) + id_bytes + length_byte + data_bytes
+    # Cyclics (1 byte, giá trị 0-255 ms, nếu lớn hơn thì lấy 255)
+    try:
+        cyclics_int = int(float(cyclics))
+    except Exception:
+        cyclics_int = 0
+    if cyclics_int < 0:
+        cyclics_int = 0
+    if cyclics_int > 255:
+        cyclics_int = 255
+    cyclics_byte = cyclics_int.to_bytes(1, 'big')
+
+    # Ghép tất cả thành frame: [model][id][length][data][cyclics]
+    frame = bytes([model]) + id_bytes + length_byte + data_bytes + cyclics_byte 
     return frame
 
 @app.route('/')
@@ -112,19 +123,19 @@ def index():
 
 @app.route('/send', methods=['POST'])
 def send():
-    global ser, running
+    global ser
     if ser is None or not ser.is_open:
         return jsonify({'error': 'Serial not connected'}), 400
     try:
         data = request.json
         print("Received data:", data)
-        model = data['model']
+        model = int(data['model'])
         id_str = data['id']
         data_str = data['data']
-        cyclics = float(data['cyclics']) / 1000.0
+        cyclics = data.get('cyclics', 0)
         baudrate = int(data['baudrate'])
 
-        frame = encode_uart_frame(model, id_str, data_str)
+        frame = encode_uart_frame(model, id_str, data_str, cyclics)
         print("Frame to send:", frame)
 
         if ser is None or not ser.is_open or ser.baudrate != baudrate:
@@ -132,18 +143,9 @@ def send():
                 ser.close()
             ser = serial.Serial('COM18', baudrate = baudrate, timeout=1)
 
-        if cyclics == 0:
-            ser.write(frame)
-        else:
-            def loop_send():
-                global running
-                while running:
-                    ser.write(frame)
-                    time.sleep(cyclics)
-            running = True
-            threading.Thread(target=loop_send, daemon=True).start()
+        ser.write(frame)
 
-        return jsonify({'status': 'started'})
+        return jsonify({'status': 'sent'})
     except Exception as e:
         print("Send error:", e)
         return jsonify({'error': str(e)}), 500
@@ -155,7 +157,6 @@ def send_all():
         return jsonify({'error': 'Serial not connected'}), 400
     data = request.json
     rows = data['list']
-    cyclics = data['cyclics'] / 1000.0
     baudrate = data['baudrate']
 
     if ser is None or not ser.is_open or ser.baudrate != baudrate:
@@ -163,28 +164,12 @@ def send_all():
             ser.close()
         ser = serial.Serial('COM18', baudrate = baudrate, timeout=1)
 
-    def loop():
-        for row in rows:
-            frame = encode_uart_frame(row['model'], row['id'], row['data'])
-            ser.write(frame)
-            time.sleep(cyclics)
+    for row in rows:
+        frame = encode_uart_frame(int(row['model']), row['id'], row['data'], row.get('cyclics', 0))
+        ser.write(frame)
+        # Không sleep, không gửi lặp lại
 
-    threading.Thread(target=loop).start()
-    return jsonify({'status': 'sending all'})
-
-@app.route('/stop')
-def stop():
-    global running
-    running = False
-    if ser:
-        ser.write(b'\xFF')  # Tín hiệu dừng
-    return jsonify({'status': 'stopped'})
-
-@app.route('/stop_frame', methods=['POST'])
-def stop_frame():
-    global running
-    running = False
-    return jsonify({'status': 'stopped'})
+    return jsonify({'status': 'sent all'})
 
 @app.route('/add', methods=['POST'])
 def save_to_xml(filename='can_data.xml'):
