@@ -1,0 +1,6 @@
+<?xml version='1.0' encoding='utf-8'?>
+<CANDict>
+  <Frame><ID>122</ID><Description>Speed</Description></Frame>
+  <Frame><ID>123</ID><Description>RPM</Description></Frame>
+  <Frame><ID>124</ID><Description>Temperature</Description></Frame>
+</CANDict>

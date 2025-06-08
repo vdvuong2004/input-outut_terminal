@@ -5,6 +5,7 @@ import time
 import xml.etree.ElementTree as ET
 import os
 import queue
+import re
 app = Flask(__name__, static_url_path='')
 
 ser = None
@@ -13,6 +14,8 @@ send_thread = None
 
 # Thêm queue để lưu các frame nhận được
 receive_queue = queue.Queue(maxsize=1000)  # Giới hạn tối đa 1000 frame
+from serial.tools import list_ports
+print([p.device for p in list_ports.comports()])
 
 # Thread đọc dữ liệu từ serial và lưu vào receive_queue
 def serial_receive_thread():
@@ -20,57 +23,60 @@ def serial_receive_thread():
     while True:
         if ser and ser.is_open:
             try:
-                # Đọc dữ liệu từ serial (giả sử mỗi frame kết thúc bằng ký tự xuống dòng)
                 line = ser.readline()
                 if line:
-                    # Giả sử frame có dạng: [id(hex)] [data(hex)] [timestamp]
-                    # Ví dụ: "1AB 11223344 1717670000"
                     try:
-                        parts = line.decode(errors='ignore').strip().split()
-                        if len(parts) >= 2:
-                            id_str = parts[0]
-                            data_str = parts[1]
+                        decoded = line.decode(errors='ignore').strip()
+                        match = re.match(r'ID:\s*0x([0-9A-Fa-f]+)\s*\[(Std|Ext)\],\s*Data:\s*([\dA-Fa-f\s]+)', decoded)
+                        if match:
+                            id_str = match.group(1)  # Lấy ID không có 0x
+                            model = match.group(2)    # Std hoặc Ext
+                            data_str = match.group(3).strip()
                             timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
+                            
+                            # Định dạng lại dữ liệu trước khi đưa vào queue
                             receive_queue.put({
                                 'id': id_str,
-                                'data': data_str,
+                                'model': model,
+                                'data': data_str, 
                                 'timestamp': timestamp
                             })
-                            # Giới hạn số lượng frame trong queue
-                            while receive_queue.qsize() > 1000:
-                                receive_queue.get()
                     except Exception as e:
-                        pass
+                        print(f"Parse error: {e}")
             except Exception as e:
                 time.sleep(0.1)
         else:
             time.sleep(0.5)
 
 # Khởi động thread nhận dữ liệu khi app chạy lần đầu
-@app.before_first_request
+@app.before_request
 def start_receive_thread():
-    t = threading.Thread(target=serial_receive_thread, daemon=True)
-    t.start()
+    if not hasattr(app, 'thread_started'):
+        t = threading.Thread(target=serial_receive_thread, daemon=True)
+        t.start()
+        app.thread_started = True
+
 
 @app.route('/get_received_data')
 def get_received_data():
     # Đọc ánh xạ id -> Description từ can_data.xml
     desc_map = {}
     try:
-        tree = ET.parse('can_data.xml')
+        tree = ET.parse('can_dict.xml')
         root = tree.getroot()
         for frame in root.findall('Frame'):
-            id_val = frame.find('ID').text
+            id_val = frame.find('ID').text.strip()  # Không convert sang int
             desc = frame.find('Description').text if frame.find('Description') is not None else ""
-            desc_map[id_val] = desc
-    except Exception:
-        pass
+            desc_map[id_val.upper()] = desc  # .upper() giúp khớp với "7A" hoặc "7a"
+    except Exception as e:
+        print("Lỗi khi đọc can_dict.xml:", e)
 
-    # Lấy danh sách frame nhận được
-    frames = list(receive_queue.queue)
-    # Thêm Description vào từng frame dựa theo id
+        # Lấy danh sách frame nhận được
+        frames = list(receive_queue.queue)
+        # Thêm Description vào từng frame dựa theo id
     for f in frames:
-        f['description'] = desc_map.get(f['id'], "")
+        f_id = f['id'].upper()  # Khớp với ID từ XML
+        f['description'] = desc_map.get(f_id, "")
 
     return jsonify(frames)
 
@@ -124,7 +130,7 @@ def send():
         if ser is None or not ser.is_open or ser.baudrate != baudrate:
             if ser:
                 ser.close()
-            ser = serial.Serial('COM7', baudrate, timeout=1)
+            ser = serial.Serial('COM18', baudrate = baudrate, timeout=1)
 
         if cyclics == 0:
             ser.write(frame)
@@ -155,7 +161,7 @@ def send_all():
     if ser is None or not ser.is_open or ser.baudrate != baudrate:
         if ser:
             ser.close()
-        ser = serial.Serial('COM7', baudrate, timeout=1)
+        ser = serial.Serial('COM18', baudrate = baudrate, timeout=1)
 
     def loop():
         for row in rows:
@@ -283,20 +289,32 @@ def import_xml():
     file.save('can_data.xml')
     return jsonify({'status': 'imported'})
 
+
+from serial.tools import list_ports
 @app.route('/connect_serial', methods=['POST'])
 def connect_serial():
     global ser
     data = request.json
-    port = data.get('port', 'COM7')
-    baudrate = int(data.get('baudrate', 9600))
+    port = data.get('port', 'COM18')
+    baudrate = int(data.get('baudrate', 115200))
+    print(f"Trying to connect to port: {port} with baudrate: {baudrate}")
+
+    available_ports = [p.device for p in list_ports.comports()]
+    print(f"Available ports: {available_ports}")
+    if port not in available_ports:
+        return jsonify({'status': 'error', 'message': f'Port {port} not found. Available: {available_ports}'}), 500
+
     try:
         if ser and ser.is_open:
             ser.close()
-        ser = serial.Serial(port, baudrate, timeout=1)
+        ser = serial.Serial(port, baudrate=baudrate, timeout=1)
+        print(f"Connected to {port} successfully")
         return jsonify({'status': 'connected'})
     except Exception as e:
-        ser = None
-        return jsonify({'status': 'error', 'message': str(e)}), 500
+        import traceback
+        print("Error connecting serial:", e)
+        print(traceback.format_exc())
+        return jsonify({'status': 'error', 'message': str(e), 'trace': traceback.format_exc()}), 500
 
 @app.route('/disconnect_serial', methods=['POST'])
 def disconnect_serial():

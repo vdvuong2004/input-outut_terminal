@@ -5,10 +5,63 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>UART CAN Sender</title>
   <style>
-    body { font-family: Arial; padding: 20px; background: #f0f0f0; }
-    input, select, button { margin: 5px; padding: 5px; }
-    table { border-collapse: collapse; width: 100%; margin-top: 20px; }
-    th, td { border: 1px solid #ccc; padding: 8px; text-align: center; }
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      background: #f5f7fa;
+    }
+    h2, h3 {
+      color: #2b4c7e;
+      margin-bottom: 10px;
+    }
+    label {
+      font-weight: bold;
+      color: #2b4c7e;
+    }
+    input, select, button {
+      margin: 5px;
+      padding: 7px 10px;
+      border-radius: 4px;
+      border: 1px solid #b0b8c1;
+      font-size: 1em;
+      outline: none;
+    }
+    input:focus, select:focus {
+      border: 1.5px solid #2b4c7e;
+    }
+    button {
+      background: #2b4c7e;
+      color: #fff;
+      border: none;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    button:hover {
+      background: #1a2d4a;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin-top: 20px;
+      background: #fff;
+    }
+    th {
+      background: #2b4c7e;
+      color: #fff;
+      padding: 10px;
+      font-size: 1em;
+    }
+    td {
+      border-bottom: 1px solid #e0e7ef;
+      padding: 8px;
+      text-align: center;
+      color: #234567;
+      background: #f9fbfd;
+    }
+    tr:last-child td {
+      border-bottom: none;
+    }
     .led {
       display: inline-block;
       width: 20px; height: 20px;
@@ -16,7 +69,17 @@
       margin-left: 10px;
       background: red;
     }
+    #connectStatus {
+      margin-left: 10px;
+      font-size: 1.1em;
+    }
+    @media (max-width: 900px) {
+      table, thead, tbody, th, td, tr { display: block; }
+      th, td { text-align: left; }
+      th { background: #2b4c7e; }
+    }
   </style>
+</head>
 </head>
 <body>
   <h2>UART CAN Frame Sender</h2>
@@ -37,7 +100,7 @@
   </select>
 
   <label>Serial Port:</label>
-<input type="text" id="serialPort" value="COM10" style="width:70px">
+<input type="text" id="serialPort" value="COM18" style="width:70px">
 <label>Baudrate:</label>
 <select id="baudrate">
   <option value="9600">9600</option>
@@ -67,7 +130,6 @@
         <th>Cyclics</th>
         <th>Baudrate</th>
         <th>Send</th>
-        <th>Stop</th>
         <th>Delete</th>
         <th>Edit</th> <!-- Thêm cột Edit -->
       </tr>
@@ -80,13 +142,14 @@
     <thead>
       <tr>
         <th>ID</th>
+        <th>Model</th>
         <th>Data</th>
-        <th>Timestamp</th>
         <th>Description</th>
+        <th>Timestamp</th>
       </tr>
     </thead>
     <tbody id="receiveTableBody"></tbody>
-  </table>
+</table>
 
 <script>
   // ...existing code...
@@ -105,24 +168,23 @@
 
   // Hàm cập nhật bảng nhận dữ liệu
   async function loadReceiveTable() {
-    // Lấy dữ liệu từ server (bạn cần cung cấp API /get_received_data trả về mảng các frame)
     const res = await fetch('/get_received_data');
     const data = await res.json();
     const tbody = document.getElementById('receiveTableBody');
     tbody.innerHTML = '';
     data.forEach(row => {
-      const tr = document.createElement('tr');
-      // Ánh xạ description từ bảng gửi
-      const description = getDescriptionById(row.id);
-      tr.innerHTML = `
-        <td>${row.id}</td>
-        <td>${row.data}</td>
-        <td>${row.timestamp}</td>
-        <td>${description}</td>
-      `;
-      tbody.appendChild(tr);
+        const tr = document.createElement('tr');
+        const description = getDescriptionById(row.id);
+        tr.innerHTML = `
+            <td>${row.id}</td>
+            <td>${row.model || 'Std'}</td>
+            <td>${row.data}</td>
+            <td>${description}</td>
+            <td>${row.timestamp}</td>
+        `;
+        tbody.appendChild(tr);
     });
-  }
+}
 
   // Gọi loadReceiveTable định kỳ mỗi 1 giây
   setInterval(loadReceiveTable, 1000);
