@@ -8,8 +8,6 @@ import queue
 app = Flask(__name__, static_url_path='')
 
 ser = None
-running = False
-send_thread = None
 
 # Thêm queue để lưu các frame nhận được
 receive_queue = queue.Queue(maxsize=1000)  # Giới hạn tối đa 1000 frame
@@ -52,27 +50,27 @@ def serial_receive_thread():
 #     t = threading.Thread(target=serial_receive_thread, daemon=True)
 #     t.start()
 
-@app.route('/get_received_data')
-def get_received_data():
-    # Đọc ánh xạ id -> Description từ can_data.xml
-    desc_map = {}
-    try:
-        tree = ET.parse('can_data.xml')
-        root = tree.getroot()
-        for frame in root.findall('Frame'):
-            id_val = frame.find('ID').text
-            desc = frame.find('Description').text if frame.find('Description') is not None else ""
-            desc_map[id_val] = desc
-    except Exception:
-        pass
+# @app.route('/get_received_data')
+# def get_received_data():
+#     # Đọc ánh xạ id -> Description từ can_data.xml
+#     desc_map = {}
+#     try:
+#         tree = ET.parse('can_data.xml')
+#         root = tree.getroot()
+#         for frame in root.findall('Frame'):
+#             id_val = frame.find('ID').text
+#             desc = frame.find('Description').text if frame.find('Description') is not None else ""
+#             desc_map[id_val] = desc
+#     except Exception:
+#         pass
 
-    # Lấy danh sách frame nhận được
-    frames = list(receive_queue.queue)
-    # Thêm Description vào từng frame dựa theo id
-    for f in frames:
-        f['description'] = desc_map.get(f['id'], "")
+    # # Lấy danh sách frame nhận được
+    # frames = list(receive_queue.queue)
+    # # Thêm Description vào từng frame dựa theo id
+    # for f in frames:
+    #     f['description'] = desc_map.get(f['id'], "")
 
-    return jsonify(frames)
+    # return jsonify(frames)
 
 # Hàm mã hóa dữ liệu thành frame UART
 def encode_uart_frame(model, id_str, data_str, cyclics):
@@ -86,9 +84,13 @@ def encode_uart_frame(model, id_str, data_str, cyclics):
 
     # Chuyển ID thành bytes: 2 byte nếu Standard, 4 byte nếu Extended
     id_bytes = id_val.to_bytes(4, 'big') if model else id_val.to_bytes(2, 'big')
-    # Chuyển data thành bytes (UTF-8)
-    data_bytes = data_str.encode('utf-8')
-    
+    # data_bytes = data_str.encode('utf-8')
+    # Chuyển data thành bytes (hex)
+    try:
+        data_bytes = bytes.fromhex(data_str)
+    except Exception:
+        data_bytes = b''
+
     # Nếu data dài quá 256 byte thì cắt bớt
     if len(data_bytes) > 256:
         data_bytes = data_bytes[:256]
@@ -96,19 +98,19 @@ def encode_uart_frame(model, id_str, data_str, cyclics):
     # Độ dài data (1 byte)
     length_byte = len(data_bytes).to_bytes(1, 'big')
 
-    # Cyclics (1 byte, giá trị 0-255 ms, nếu lớn hơn thì lấy 255)
+    # Cyclics (2 byte, giá trị 0-10000 ms, nếu lớn hơn thì lấy 10000)
     try:
         cyclics_int = int(float(cyclics))
     except Exception:
         cyclics_int = 0
     if cyclics_int < 0:
         cyclics_int = 0
-    if cyclics_int > 255:
-        cyclics_int = 255
-    cyclics_byte = cyclics_int.to_bytes(1, 'big')
+    if cyclics_int > 10000:
+        cyclics_int = 10000
+    cyclics_bytes = cyclics_int.to_bytes(2, 'big')
 
-    # Ghép tất cả thành frame: [model][id][length][data][cyclics]
-    frame = bytes([model]) + id_bytes + length_byte + data_bytes + cyclics_byte 
+    # Ghép tất cả thành frame: [model][id][length][cyclics(2 bytes)][data]
+    frame = bytes([model]) + id_bytes + length_byte + data_bytes + cyclics_bytes
     return frame
 
 @app.route('/')
@@ -144,27 +146,6 @@ def send():
         print("Send error:", e)
         return jsonify({'error': str(e)}), 500
 
-@app.route('/send_all', methods=['POST'])
-def send_all():
-    global ser
-    if ser is None or not ser.is_open:
-        return jsonify({'error': 'Serial not connected'}), 400
-    data = request.json
-    rows = data['list']
-    baudrate = data['baudrate']
-
-    if ser is None or not ser.is_open or ser.baudrate != baudrate:
-        if ser:
-            ser.close()
-        ser = serial.Serial('COM7', baudrate, timeout=1)
-
-    for row in rows:
-        frame = encode_uart_frame(int(row['model']), row['id'], row['data'], row.get('cyclics', 0))
-        ser.write(frame)
-        # Không sleep, không gửi lặp lại
-
-    return jsonify({'status': 'sent all'})
-
 @app.route('/add', methods=['POST'])
 def save_to_xml(filename='can_data.xml'):
     data = request.json
@@ -176,6 +157,11 @@ def save_to_xml(filename='can_data.xml'):
     except (FileNotFoundError, ET.ParseError):
         root = ET.Element('CANData')
         tree = ET.ElementTree(root)
+
+    # Kiểm tra trùng ID
+    for frame in root.findall('Frame'):
+        if frame.find('ID').text == data['id']:
+            return jsonify({'error': 'ID already exists'}), 400
 
     frame = ET.SubElement(root, 'Frame')
     ET.SubElement(frame, 'Model').text = str(data['model'])

@@ -19,7 +19,7 @@
   </style>
 </head>
 <body>
-  <h2>UART CAN Frame Sender</h2>
+  <h2>UART Frame Sender</h2>
 
   <label>ID (hex):</label>
   <input type="text" id="id" placeholder="e.g., 1AB">
@@ -51,7 +51,6 @@
   <input type="number" id="cyclics" value="1000">
 
   <button onclick="addRow()">Add</button>
-  <button onclick="sendAll()">Send All</button>
   <button onclick="deleteAll()">Delete All</button>
   <button id="exportBtn">Export XML</button>
   <input type="file" id="importInput" style="display:none" accept=".xml"/>
@@ -67,9 +66,8 @@
         <th>Cyclics</th>
         <th>Baudrate</th>
         <th>Send</th>
-        <th>Stop</th>
         <th>Delete</th>
-        <th>Edit</th> <!-- Thêm cột Edit -->
+        <th>Edit</th>
       </tr>
     </thead>
     <tbody id="tableBody"></tbody>
@@ -103,36 +101,36 @@
     return "";
   }
 
-  // Hàm cập nhật bảng nhận dữ liệu
-  async function loadReceiveTable() {
-    // Lấy dữ liệu từ server (bạn cần cung cấp API /get_received_data trả về mảng các frame)
-    const res = await fetch('/get_received_data');
-    const data = await res.json();
-    const tbody = document.getElementById('receiveTableBody');
-    tbody.innerHTML = '';
-    data.forEach(row => {
-      const tr = document.createElement('tr');
-      // Ánh xạ description từ bảng gửi
-      const description = getDescriptionById(row.id);
-      tr.innerHTML = `
-        <td>${row.id}</td>
-        <td>${row.data}</td>
-        <td>${row.timestamp}</td>
-        <td>${description}</td>
-      `;
-      tbody.appendChild(tr);
-    });
-  }
+//   // Hàm cập nhật bảng nhận dữ liệu
+//   async function loadReceiveTable() {
+//     // Lấy dữ liệu từ server (bạn cần cung cấp API /get_received_data trả về mảng các frame)
+//     const res = await fetch('/get_received_data');
+//     const data = await res.json();
+//     const tbody = document.getElementById('receiveTableBody');
+//     tbody.innerHTML = '';
+//     data.forEach(row => {
+//       const tr = document.createElement('tr');
+//       // Ánh xạ description từ bảng gửi
+//       const description = getDescriptionById(row.id);
+//       tr.innerHTML = `
+//         <td>${row.id}</td>
+//         <td>${row.data}</td>
+//         <td>${row.timestamp}</td>
+//         <td>${description}</td>
+//       `;
+//       tbody.appendChild(tr);
+//     });
+//   }
 
-  // Gọi loadReceiveTable định kỳ mỗi 1 giây
-  setInterval(loadReceiveTable, 1000);
+//   // Gọi loadReceiveTable định kỳ mỗi 1 giây
+//   setInterval(loadReceiveTable, 1000);
 
-  // ...existing code...
-  window.onload = function() {
-    loadTable();
-    loadReceiveTable();
-  };
-</script>
+//   // ...existing code...
+//   window.onload = function() {
+//     loadTable();
+//     loadReceiveTable();
+//   };
+// </script>
 
   <script>
     async function addRow() {
@@ -148,9 +146,15 @@
     return;
   }
 
-  // Kiểm tra định dạng hex
+  // Kiểm tra định dạng hex cho ID
   if (!/^[0-9a-fA-F]+$/.test(id)) {
     alert("ID must be a hexadecimal number");
+    return;
+  }
+
+  // Kiểm tra định dạng hex cho Data
+  if (!/^[0-9a-fA-F]+$/.test(data)) {
+    alert("Data must be a hexadecimal string");
     return;
   }
 
@@ -166,38 +170,19 @@
     return;
   }
 
-  const row = document.createElement("tr");
-  row.innerHTML = `
-    <td>${id}</td>
-    <td>${data}</td>
-    <td>${model == 1 ? 'Extended' : 'Standard'}</td>
-    <td>${description}</td>
-    <td>${cyclics}</td>
-    <td>${baudrate}</td>
-    <td><button onclick="sendRow(this)">Send</button></td>
-    <td>
-      ${(cyclics && cyclics !== "0" && cyclics !== 0)
-        ? '<button onclick="stopRow(this)">Stop</button>'
-        : ''}
-    </td>
-    <td>
-      <button onclick="deleteRow(this)">Delete</button>
-    </td>
-    <td><button onclick="editRow(this)">Edit</button></td>
-  `;
-  row.dataset.model = model;
-  row.dataset.id = id;
-  row.dataset.data = data;
-  row.dataset.description = description;
-  row.dataset.baudrate = baudrate;
-  row.dataset.cyclics = cyclics;
-  document.getElementById("tableBody").appendChild(row);
+  // Gửi request lên server và kiểm tra lỗi
+  const res = await fetch('/add', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model, id, data, description, cyclics, baudrate })
+  });
+  const result = await res.json();
+  if (!res.ok) {
+    alert(result.error || "Add failed");
+    return;
+  }
 
-  await fetch('/add', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model, id, data, description, cyclics, baudrate })
-      });
+  loadTable();
 }
 
 
@@ -216,25 +201,6 @@
       });
     }
 
-    async function sendAll() {
-      const rows = Array.from(document.querySelectorAll("#tableBody tr")).map(row => ({
-        model: parseInt(row.dataset.model),
-        id: row.dataset.id,
-        data: row.dataset.data
-      }));
-      const baudrate = parseInt(document.getElementById("baudrate").value);
-      const cyclics = parseInt(document.getElementById("cyclics").value);
-      await fetch('/send_all', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ list: rows, cyclics, baudrate })
-      });
-    }
-
-    async function stopSend() {
-      await fetch('/stop');
-    }
-
     function createRowHTML(row, isEdit = false) {
   if (!isEdit) {
     return `
@@ -245,11 +211,6 @@
       <td>${row.cyclics || ""}</td>
       <td>${row.baudrate || ""}</td>
       <td><button onclick="sendRow(this)">Send</button></td>
-      <td>
-        ${(row.cyclics && row.cyclics !== "0" && row.cyclics !== 0)
-          ? '<button onclick="stopRow(this)">Stop</button>'
-          : ''}
-      </td>
       <td><button onclick="deleteRow(this)">Delete</button></td>
       <td><button onclick="editRow(this)">Edit</button></td>
     `;
@@ -266,7 +227,6 @@
       <td><input value="${row.description || ""}" style="width:80px"/></td>
       <td><input type="number" value="${row.cyclics || ""}" style="width:60px"/></td>
       <td><input value="${row.baudrate || ""}" style="width:80px"/></td>
-      <td></td>
       <td></td>
       <td><button onclick="cancelEdit(this)">Cancel</button></td>
       <td><button onclick="saveEdit(this)">Save</button></td>
@@ -365,11 +325,11 @@
 
     async function deleteRow(btn) {
     const tr = btn.parentElement.parentElement;
-    const tds = tr.children;
-    const model = tds[0].innerText === "Extended" ? "1" : "0";
-    const id = tds[1].innerText;
-    const data = tds[2].innerText;
-    const description = tds[3].innerText;
+    // Lấy dữ liệu từ dataset để đảm bảo đúng thông tin
+    const model = tr.dataset.model;
+    const id = tr.dataset.id;
+    const data = tr.dataset.data;
+    const description = tr.dataset.description;
 
     await fetch('/delete', {
         method: 'POST',
@@ -378,6 +338,8 @@
     });
     // Xóa dòng khỏi bảng
     tr.remove();
+    // Reload lại bảng để đồng bộ với file XML
+    loadTable();
 }
 
 async function deleteAll() {
@@ -385,21 +347,6 @@ async function deleteAll() {
         await fetch('/delete_all', { method: 'POST' });
         loadTable();
     }
-}
-
-async function stopRow(btn) {
-    const tr = btn.parentElement.parentElement;
-    const tds = tr.children;
-    const model = tds[0].innerText === "Extended" ? "1" : "0";
-    const id = tds[1].innerText;
-    const data = tds[2].innerText;
-    const description = tds[3].innerText;
-
-    await fetch('/stop_frame', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model, id, data, description })
-    });
 }
 
 document.getElementById('exportBtn').onclick = function() {
