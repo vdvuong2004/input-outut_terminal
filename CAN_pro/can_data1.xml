@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<CANData>
+<Frame><Model>0</Model><ID>123</ID><Data>fff</Data><Description>ffff</Description><Cyclics>1000</Cyclics><Baudrate>115200</Baudrate></Frame>
+<Frame><Model>0</Model><ID>122</ID><Data>ggg</Data><Description>gggg</Description><Cyclics>1000</Cyclics><Baudrate>9600</Baudrate></Frame>
+<Frame><Model>0</Model><ID>125</ID><Data>ccc</Data><Description>ddd</Description><Cyclics>1000</Cyclics><Baudrate>115200</Baudrate></Frame>
+<Frame><Model>0</Model><ID>145</ID><Data>ccc</Data><Description>ddd</Description><Cyclics>1000</Cyclics><Baudrate>9600</Baudrate></Frame>
+</CANData>

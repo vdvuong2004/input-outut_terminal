@@ -532,8 +532,32 @@ document.getElementById('connectBtn').onclick = async function() {
     }
 };
 
+// Thêm hàm load dữ liệu ban đầu
+function loadInitialData(data) {
+    const tbody = document.getElementById('tableBody');
+    tbody.innerHTML = ''; // Xóa dữ liệu cũ
+    
+    data.forEach(item => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${item.id}</td>
+            <td>${item.data}</td>
+            <td>${item.model}</td>
+            <td>${item.description}</td>
+            <td>${item.cyclics}</td>
+            <td>${item.baudrate}</td>
+            <td><button onclick="sendFrame('${item.id}')">Send</button></td>
+            <td><button onclick="deleteFrame('${item.id}')">Delete</button></td>
+            <td><button onclick="editFrame('${item.id}')">Edit</button></td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+// Gọi hàm khi trang load xong
 window.onload = function() {
-  loadTable();
+    const initialData = JSON.parse('{{ initial_data | tojson | safe }}');
+    loadInitialData(initialData);
 };
   </script>
 </body>
