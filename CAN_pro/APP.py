@@ -326,3 +326,4 @@ def disconnect_serial():
 
 if __name__ == '__main__':
     app.run(debug=True)
+

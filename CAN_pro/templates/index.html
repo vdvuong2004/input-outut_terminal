@@ -78,6 +78,33 @@
             th, td { text-align: left; }
             th { background: #2b4c7e; }
         }
+    .scrollable-table {
+    max-height: 300px; /* Bạn có thể điều chỉnh chiều cao */
+    overflow-y: auto;
+    border: 1px solid #b0b8c1;
+    }
+
+    .scrollable-table table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    /* Sticky header cho bảng bên trong div */
+    .scrollable-table thead th {
+        position: sticky;
+        top: 0;
+        background: #2b4c7e;
+        color: white;
+        z-index: 1;
+    }
+    /* Đảm bảo các cột không bị lệch */
+    table.scrollable-table thead th {
+        position: sticky;
+        top: 0;
+        background: #2b4c7e;
+        z-index: 1;
+    }
+    
     </style>
 </head>
 <body>
@@ -117,10 +144,11 @@
     <button id="exportBtn">Export XML</button>
     <input type="file" id="importInput" style="display:none" accept=".xml"/>
     <button id="importBtn">Import XML</button>
-
-    <table>
+    <div class="scrollable-table">
+    <table > 
         <thead>
             <tr>
+                <th>STT</th>
                 <th>ID</th>
                 <th>Data</th>
                 <th>Model</th>
@@ -134,11 +162,14 @@
         </thead>
         <tbody id="tableBody"></tbody>
     </table>
-
+    </div>
+   <!-- Hiển thị bảng nhận dữ liệu -->
+    <div class="scrollable-table">
     <h3>Received CAN Frames</h3>
-    <table>
+    <table class="scrollable-table">
         <thead>
             <tr>
+                <th>STT</th>
                 <th>ID</th>
                 <th>Model</th>
                 <th>Data</th>
@@ -148,6 +179,7 @@
         </thead>
         <tbody id="receiveTableBody"></tbody>
     </table>
+    </div>
 
     <script>
         // Map id to description for received table
@@ -169,10 +201,11 @@
                 const data = await res.json();
                 const tbody = document.getElementById('receiveTableBody');
                 tbody.innerHTML = '';
-                data.forEach(row => {
+                data.forEach(row ,index => {
                     const tr = document.createElement('tr');
                     const description = getDescriptionById(row.id);
                     tr.innerHTML = `
+                        <td>${index + 1}</td>
                         <td>${row.id}</td>
                         <td>${row.model || 'Std'}</td>
                         <td>${row.data}</td>
@@ -298,9 +331,9 @@
                 const data = await res.json();
                 const tbody = document.getElementById('tableBody');
                 tbody.innerHTML = '';
-                data.forEach(row => {
+                data.forEach((row, index) => {
                     const tr = document.createElement('tr');
-                    tr.innerHTML = createRowHTML(row);
+                    tr.innerHTML = `<td>${index + 1}</td>` + createRowHTML(row);
                     // Đặt dataset cho dòng khi tải từ server
                     tr.dataset.model = row.model;
                     tr.dataset.id = row.id;
