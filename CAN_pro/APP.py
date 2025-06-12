@@ -1,16 +1,24 @@
-from flask import Flask, request, jsonify, send_from_directory, send_file
+from flask import Flask, request, jsonify, send_from_directory, send_file, render_template
 import serial
 import threading
 import time
 import xml.etree.ElementTree as ET
 import os
 import queue
+import re
 app = Flask(__name__, static_url_path='')
 
 ser = None
+running = False
+send_thread = None
 
 # Thêm queue để lưu các frame nhận được
 receive_queue = queue.Queue(maxsize=1000)  # Giới hạn tối đa 1000 frame
+from serial.tools import list_ports
+print([p.device for p in list_ports.comports()])
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+XML_FILE = os.path.join(BASE_DIR, 'can_data1.xml')
 
 # Thread đọc dữ liệu từ serial và lưu vào receive_queue
 def serial_receive_thread():
@@ -18,61 +26,67 @@ def serial_receive_thread():
     while True:
         if ser and ser.is_open:
             try:
-                # Đọc dữ liệu từ serial (giả sử mỗi frame kết thúc bằng ký tự xuống dòng)
                 line = ser.readline()
                 if line:
-                    # Giả sử frame có dạng: [id(hex)] [data(hex)] [timestamp]
-                    # Ví dụ: "1AB 11223344 1717670000"
                     try:
-                        parts = line.decode(errors='ignore').strip().split()
-                        if len(parts) >= 2:
-                            id_str = parts[0]
-                            data_str = parts[1]
+                        decoded = line.decode(errors='ignore').strip()
+                        match = re.match(r'ID:\s*0x([0-9A-Fa-f]+)\s*\[(Std|Ext)\],\s*Data:\s*([\dA-Fa-f\s]+)', decoded)
+                        if match:
+                            id_str = match.group(1)  # Lấy ID không có 0x
+                            model = match.group(2)    # Std hoặc Ext
+                            data_str = match.group(3).strip()
                             timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
+                            # Định dạng lại dữ liệu trước khi đưa vào queue
                             receive_queue.put({
                                 'id': id_str,
-                                'data': data_str,
+                                'model': model,
+                                'data': data_str, 
                                 'timestamp': timestamp
                             })
-                            # Giới hạn số lượng frame trong queue
-                            while receive_queue.qsize() > 1000:
-                                receive_queue.get()
                     except Exception as e:
-                        pass
+                        print(f"Parse error: {e}")
             except Exception as e:
                 time.sleep(0.1)
         else:
             time.sleep(0.5)
 
 # Khởi động thread nhận dữ liệu khi app chạy lần đầu
-# @app.before_first_request
-# def start_receive_thread():
-#     t = threading.Thread(target=serial_receive_thread, daemon=True)
-#     t.start()
 
-# @app.route('/get_received_data')
-# def get_received_data():
-#     # Đọc ánh xạ id -> Description từ can_data.xml
-#     desc_map = {}
-#     try:
-#         tree = ET.parse('can_data.xml')
-#         root = tree.getroot()
-#         for frame in root.findall('Frame'):
-#             id_val = frame.find('ID').text
-#             desc = frame.find('Description').text if frame.find('Description') is not None else ""
-#             desc_map[id_val] = desc
-#     except Exception:
-#         pass
+@app.before_request
+def start_receive_thread():
+    if not hasattr(app, 'thread_started'):
+        t = threading.Thread(target=serial_receive_thread, daemon=True)
+        t.start()
+        app.thread_started = True
 
-    # # Lấy danh sách frame nhận được
-    # frames = list(receive_queue.queue)
-    # # Thêm Description vào từng frame dựa theo id
-    # for f in frames:
-    #     f['description'] = desc_map.get(f['id'], "")
+@app.route('/get_received_data')
+def get_received_data():
+    # Lấy đường dẫn tuyệt đối tới file can_dict.xml
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    xml_path = os.path.join(current_dir, 'can_dict.xml')
 
-    # return jsonify(frames)
+    # Đọc ánh xạ id -> Description từ can_dict.xml
+    desc_map = {}
+    try:
+        tree = ET.parse(xml_path)
+        root = tree.getroot()
+        for frame in root.findall('Frame'):
+            id_val = frame.find('ID').text.strip()
+            desc = frame.find('Description').text if frame.find('Description') is not None else ""
+            desc_map[id_val.upper()] = desc
+    except Exception as e:
+        print("Lỗi khi đọc can_dict.xml:", e)
 
-# Hàm mã hóa dữ liệu thành frame UART
+    # Lấy danh sách frame nhận được
+    frames = list(receive_queue.queue)
+
+    # Thêm Description vào từng frame dựa theo id
+    for f in frames:
+        f_id = f['id'].upper()
+        f['description'] = desc_map.get(f_id, "")
+
+    return jsonify(frames)
+
 def encode_uart_frame(model, id_str, data_str, cyclics):
     id_val = int(id_str, 16)  # Chuyển ID từ chuỗi hex sang số nguyên
 
@@ -115,7 +129,25 @@ def encode_uart_frame(model, id_str, data_str, cyclics):
 
 @app.route('/')
 def index():
-    return send_from_directory('templates', 'index.html')
+    try:
+        # Đọc dữ liệu từ XML khi load trang
+        tree = ET.parse(XML_FILE)
+        root = tree.getroot()
+        initial_data = []
+        for frame in root.findall('Frame'):
+            item = {
+                'id': frame.find('ID').text,
+                'data': frame.find('Data').text,
+                'model': 'Standard' if frame.find('Model').text == '0' else 'Extended',
+                'description': frame.find('Description').text if frame.find('Description') is not None else '',
+                'cyclics': frame.find('Cyclics').text,
+                'baudrate': frame.find('Baudrate').text
+            }
+            initial_data.append(item)
+        return render_template('index.html', initial_data=initial_data)
+    except Exception as e:
+        print(f"Error loading XML: {e}")
+        return render_template('index.html', initial_data=[])
 
 @app.route('/send', methods=['POST'])
 def send():
@@ -137,7 +169,7 @@ def send():
         if ser is None or not ser.is_open or ser.baudrate != baudrate:
             if ser:
                 ser.close()
-            ser = serial.Serial('COM7', baudrate, timeout=1)
+            ser = serial.Serial('COM7', baudrate = baudrate, timeout=1)
 
         ser.write(frame)
 
@@ -147,7 +179,7 @@ def send():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/add', methods=['POST'])
-def save_to_xml(filename='can_data.xml'):
+def save_to_xml(filename=XML_FILE):
     data = request.json
 
     # Nếu file đã tồn tại, đọc và thêm Frame mới
@@ -158,7 +190,7 @@ def save_to_xml(filename='can_data.xml'):
         root = ET.Element('CANData')
         tree = ET.ElementTree(root)
 
-    # Kiểm tra trùng ID
+    # Kiểm tra trùng IDAdd commentMore actions
     for frame in root.findall('Frame'):
         if frame.find('ID').text == data['id']:
             return jsonify({'error': 'ID already exists'}), 400
@@ -176,7 +208,7 @@ def save_to_xml(filename='can_data.xml'):
 
 @app.route('/get_data', methods=['GET'])
 def get_data():
-    filename = 'can_data.xml'
+    filename = XML_FILE
     try:
         tree = ET.parse(filename)
         root = tree.getroot()
@@ -197,7 +229,7 @@ def get_data():
 
 @app.route('/delete', methods=['POST'])
 def delete_from_xml():
-    filename = 'can_data.xml'
+    filename = XML_FILE
     req = request.json
     id_to_delete = req.get('id')
     model_to_delete = str(req.get('model'))
@@ -226,7 +258,7 @@ def delete_from_xml():
 
 @app.route('/delete_all', methods=['POST'])
 def delete_all():
-    filename = 'can_data.xml'
+    filename = XML_FILE
     try:
         # Tạo lại file với root rỗng
         root = ET.Element('CANData')
@@ -238,7 +270,7 @@ def delete_all():
 
 @app.route('/export_xml', methods=['GET'])
 def export_xml():
-    filename = 'can_data.xml'
+    filename = XML_FILE
     if os.path.exists(filename):
         return send_file(filename, as_attachment=True)
     else:
@@ -251,23 +283,35 @@ def import_xml():
     file = request.files['file']
     if file.filename == '':
         return jsonify({'error': 'No selected file'}), 400
-    file.save('can_data.xml')
+    file.save(XML_FILE)
     return jsonify({'status': 'imported'})
 
+
+from serial.tools import list_ports
 @app.route('/connect_serial', methods=['POST'])
 def connect_serial():
     global ser
     data = request.json
     port = data.get('port', 'COM7')
-    baudrate = int(data.get('baudrate', 9600))
+    baudrate = int(data.get('baudrate', 115200))
+    print(f"Trying to connect to port: {port} with baudrate: {baudrate}")
+
+    available_ports = [p.device for p in list_ports.comports()]
+    print(f"Available ports: {available_ports}")
+    if port not in available_ports:
+        return jsonify({'status': 'error', 'message': f'Port {port} not found. Available: {available_ports}'}), 500
+
     try:
         if ser and ser.is_open:
             ser.close()
-        ser = serial.Serial(port, baudrate, timeout=1)
+        ser = serial.Serial(port, baudrate=baudrate, timeout=1)
+        print(f"Connected to {port} successfully")
         return jsonify({'status': 'connected'})
     except Exception as e:
-        ser = None
-        return jsonify({'status': 'error', 'message': str(e)}), 500
+        import traceback
+        print("Error connecting serial:", e)
+        print(traceback.format_exc())
+        return jsonify({'status': 'error', 'message': str(e), 'trace': traceback.format_exc()}), 500
 
 @app.route('/disconnect_serial', methods=['POST'])
 def disconnect_serial():

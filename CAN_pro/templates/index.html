@@ -1,425 +1,505 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>UART CAN Sender</title>
-  <style>
-    body { font-family: Arial; padding: 20px; background: #f0f0f0; }
-    input, select, button { margin: 5px; padding: 5px; }
-    table { border-collapse: collapse; width: 100%; margin-top: 20px; }
-    th, td { border: 1px solid #ccc; padding: 8px; text-align: center; }
-    .led {
-      display: inline-block;
-      width: 20px; height: 20px;
-      border-radius: 50%;
-      margin-left: 10px;
-      background: red;
-    }
-  </style>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>UART CAN Sender</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #f5f7fa;
+        }
+        h2, h3 {
+            color: #2b4c7e;
+            margin-bottom: 10px;
+        }
+        label {
+            font-weight: bold;
+            color: #2b4c7e;
+        }
+        input, select, button {
+            margin: 5px;
+            padding: 7px 10px;
+            border-radius: 4px;
+            border: 1px solid #b0b8c1;
+            font-size: 1em;
+            outline: none;
+        }
+        input:focus, select:focus {
+            border: 1.5px solid #2b4c7e;
+        }
+        button {
+            background: #2b4c7e;
+            color: #fff;
+            border: none;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        button:hover {
+            background: #1a2d4a;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin-top: 20px;
+            background: #fff;
+        }
+        th {
+            background: #2b4c7e;
+            color: #fff;
+            padding: 10px;
+            font-size: 1em;
+        }
+        td {
+            border-bottom: 1px solid #e0e7ef;
+            padding: 8px;
+            text-align: center;
+            color: #234567;
+            background: #f9fbfd;
+        }
+        tr:last-child td {
+            border-bottom: none;
+        }
+        .led {
+            display: inline-block;
+            width: 20px; height: 20px;
+            border-radius: 50%;
+            margin-left: 10px;
+            background: red;
+        }
+        #connectStatus {
+            margin-left: 10px;
+            font-size: 1.1em;
+        }
+        @media (max-width: 900px) {
+            table, thead, tbody, th, td, tr { display: block; }
+            th, td { text-align: left; }
+            th { background: #2b4c7e; }
+        }
+    </style>
 </head>
 <body>
-  <h2>UART Frame Sender</h2>
+    <h2>UART Frame Sender</h2>
 
-  <label>ID (hex):</label>
-  <input type="text" id="id" placeholder="e.g., 1AB">
+    <label>ID (hex):</label>
+    <input type="text" id="id" placeholder="e.g., 1AB">
 
-  <label>Data:</label>
-  <input type="text" id="data" placeholder="hello">
+    <label>Data:</label>
+    <input type="text" id="data" placeholder="hello">
 
-  <label>Description:</label>
-  <input type="text" id="description" placeholder="Description">
+    <label>Description:</label>
+    <input type="text" id="description" placeholder="Description">
 
-  <label>Model:</label>
-  <select id="model">
-    <option value="0">Standard</option>
-    <option value="1">Extended</option>
-  </select>
+    <label>Model:</label>
+    <select id="model">
+        <option value="0">Standard</option>
+        <option value="1">Extended</option>
+    </select>
 
-  <label>Serial Port:</label>
-<input type="text" id="serialPort" value="COM10" style="width:70px">
-<label>Baudrate:</label>
-<select id="baudrate">
-  <option value="9600">9600</option>
-  <option value="115200">115200</option>
-  <option value="500000">500000</option>
-</select>
-<button id="connectBtn">Connect</button>
-<span id="connectStatus" style="color:green; font-weight:bold;"></span>
+    <label>Serial Port:</label>
+    <input type="text" id="serialPort" value="COM18" style="width:70px">
+    <label>Baudrate:</label>
+    <select id="baudrate">
+        <option value="9600">9600</option>
+        <option value="115200">115200</option>
+        <option value="500000">500000</option>
+    </select>
+    <button id="connectBtn">Connect</button>
+    <span id="connectStatus" style="color:green; font-weight:bold;"></span>
 
-  <label id="cyclics-label">Cyclics(ms):</label>
-  <input type="number" id="cyclics" value="1000">
+    <label id="cyclics-label">Cyclics(ms):</label>
+    <input type="number" id="cyclics" value="1000">
 
-  <button onclick="addRow()">Add</button>
-  <button onclick="deleteAll()">Delete All</button>
-  <button id="exportBtn">Export XML</button>
-  <input type="file" id="importInput" style="display:none" accept=".xml"/>
-  <button id="importBtn">Import XML</button>
+    <button onclick="addRow()">Add</button>
+    <button onclick="deleteAll()">Delete All</button>
+    <button id="exportBtn">Export XML</button>
+    <input type="file" id="importInput" style="display:none" accept=".xml"/>
+    <button id="importBtn">Import XML</button>
 
-  <table>
-    <thead>
-      <tr>
-        <th>ID</th>
-        <th>Data</th>
-        <th>Model</th>
-        <th>Description</th>
-        <th>Cyclics</th>
-        <th>Baudrate</th>
-        <th>Send</th>
-        <th>Delete</th>
-        <th>Edit</th>
-      </tr>
-    </thead>
-    <tbody id="tableBody"></tbody>
-  </table>
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Data</th>
+                <th>Model</th>
+                <th>Description</th>
+                <th>Cyclics</th>
+                <th>Baudrate</th>
+                <th>Send</th>
+                <th>Delete</th>
+                <th>Edit</th>
+            </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+    </table>
 
- <h3>Received CAN Frames</h3>
-  <table>
-    <thead>
-      <tr>
-        <th>ID</th>
-        <th>Data</th>
-        <th>Timestamp</th>
-        <th>Description</th>
-      </tr>
-    </thead>
-    <tbody id="receiveTableBody"></tbody>
-  </table>
+    <h3>Received CAN Frames</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Model</th>
+                <th>Data</th>
+                <th>Description</th>
+                <th>Timestamp</th>
+            </tr>
+        </thead>
+        <tbody id="receiveTableBody"></tbody>
+    </table>
 
-<script>
-  // ...existing code...
-
-  // Map id to description for received table
-  function getDescriptionById(id) {
-    // Lấy tất cả các dòng gửi để ánh xạ description
-    const rows = document.querySelectorAll("#tableBody tr");
-    for (const row of rows) {
-      if (row.dataset.id && row.dataset.id.toLowerCase() === id.toLowerCase()) {
-        return row.dataset.description || "";
-      }
-    }
-    return "";
-  }
-
-//   // Hàm cập nhật bảng nhận dữ liệu
-//   async function loadReceiveTable() {
-//     // Lấy dữ liệu từ server (bạn cần cung cấp API /get_received_data trả về mảng các frame)
-//     const res = await fetch('/get_received_data');
-//     const data = await res.json();
-//     const tbody = document.getElementById('receiveTableBody');
-//     tbody.innerHTML = '';
-//     data.forEach(row => {
-//       const tr = document.createElement('tr');
-//       // Ánh xạ description từ bảng gửi
-//       const description = getDescriptionById(row.id);
-//       tr.innerHTML = `
-//         <td>${row.id}</td>
-//         <td>${row.data}</td>
-//         <td>${row.timestamp}</td>
-//         <td>${description}</td>
-//       `;
-//       tbody.appendChild(tr);
-//     });
-//   }
-
-//   // Gọi loadReceiveTable định kỳ mỗi 1 giây
-//   setInterval(loadReceiveTable, 1000);
-
-//   // ...existing code...
-//   window.onload = function() {
-//     loadTable();
-//     loadReceiveTable();
-//   };
-// </script>
-
-  <script>
-    async function addRow() {
-  const model = document.getElementById("model").value;
-  const id = document.getElementById("id").value.trim();
-  const data = document.getElementById("data").value.trim();
-  const description = document.getElementById("description").value.trim();
-  const baudrate = document.getElementById("baudrate").value;
-  const cyclics = document.getElementById("cyclics").value;
-
-  if (!id || !data) {
-    alert("Please enter ID and Data");
-    return;
-  }
-
-  // Kiểm tra định dạng hex cho ID
-  if (!/^[0-9a-fA-F]+$/.test(id)) {
-    alert("ID must be a hexadecimal number");
-    return;
-  }
-
-  // Kiểm tra định dạng hex cho Data
-  if (!/^[0-9a-fA-F]+$/.test(data)) {
-    alert("Data must be a hexadecimal string");
-    return;
-  }
-
-  const idValue = parseInt(id, 16);
-
-  if (model == "0" && idValue > 0x7FF) {
-    alert("Standard ID must be 11-bit (max: 0x7FF)");
-    return;
-  }
-
-  if (model == "1" && idValue > 0x1FFFFFFF) {
-    alert("Extended ID must be 29-bit (max: 0x1FFFFFFF)");
-    return;
-  }
-
-  // Gửi request lên server và kiểm tra lỗi
-  const res = await fetch('/add', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model, id, data, description, cyclics, baudrate })
-  });
-  const result = await res.json();
-  if (!res.ok) {
-    alert(result.error || "Add failed");
-    return;
-  }
-
-  loadTable();
-}
-
-
-    async function sendRow(btn) {
-      const row = btn.parentElement.parentElement;
-      const model = parseInt(row.dataset.model);
-      const id = row.dataset.id;
-      const data = row.dataset.data;
-      const baudrate = parseInt(row.dataset.baudrate) || parseInt(document.getElementById("baudrate").value);
-      const cyclics = parseInt(row.dataset.cyclics) || 0;
-      console.log({ model, id, data, cyclics, baudrate });
-      await fetch('/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model, id, data, cyclics, baudrate })
-      });
-    }
-
-    function createRowHTML(row, isEdit = false) {
-  if (!isEdit) {
-    return `
-      <td>${row.id}</td>
-      <td>${row.data}</td>
-      <td>${row.model == "1" ? "Extended" : "Standard"}</td>
-      <td>${row.description || ""}</td>
-      <td>${row.cyclics || ""}</td>
-      <td>${row.baudrate || ""}</td>
-      <td><button onclick="sendRow(this)">Send</button></td>
-      <td><button onclick="deleteRow(this)">Delete</button></td>
-      <td><button onclick="editRow(this)">Edit</button></td>
-    `;
-  } else {
-    return `
-      <td><input value="${row.id}" style="width:60px"/></td>
-      <td><input value="${row.data}" style="width:80px"/></td>
-      <td>
-        <select>
-          <option value="0" ${row.model == "0" ? "selected" : ""}>Standard</option>
-          <option value="1" ${row.model == "1" ? "selected" : ""}>Extended</option>
-        </select>
-      </td>
-      <td><input value="${row.description || ""}" style="width:80px"/></td>
-      <td><input type="number" value="${row.cyclics || ""}" style="width:60px"/></td>
-      <td><input value="${row.baudrate || ""}" style="width:80px"/></td>
-      <td></td>
-      <td><button onclick="cancelEdit(this)">Cancel</button></td>
-      <td><button onclick="saveEdit(this)">Save</button></td>
-    `;
-  }
-}
-
-    async function loadTable() {
-      const res = await fetch('/get_data');
-      const data = await res.json();
-      const tbody = document.getElementById('tableBody');
-      tbody.innerHTML = '';
-      data.forEach(row => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = createRowHTML(row);
-        tr.dataset.model = row.model;
-        tr.dataset.id = row.id;
-        tr.dataset.data = row.data;
-        tr.dataset.description = row.description || "";
-        tr.dataset.baudrate = row.baudrate || "";
-        tr.dataset.cyclics = row.cyclics || "";
-        tbody.appendChild(tr);
-      });
-    }
-
-    // Thêm hàm editRow, cancelEdit, saveEdit
-    function editRow(btn) {
-      const tr = btn.parentElement.parentElement;
-      const row = {
-        id: tr.dataset.id,
-        data: tr.dataset.data,
-        model: tr.dataset.model,
-        description: tr.dataset.description,
-        cyclics: tr.dataset.cyclics,
-        baudrate: tr.dataset.baudrate
-      };
-      tr.innerHTML = createRowHTML(row, true);
-    }
-
-    function cancelEdit(btn) {
-      loadTable();
-    }
-
-    async function saveEdit(btn) {
-      const tr = btn.parentElement.parentElement;
-      const tds = tr.children;
-      const id = tds[0].querySelector('input').value.trim();
-      const data = tds[1].querySelector('input').value.trim();
-      const model = tds[2].querySelector('select').value;
-      const description = tds[3].querySelector('input').value.trim();
-      const cyclics = tds[4].querySelector('input').value.trim();
-      const baudrate = tds[5].querySelector('input').value.trim();
-
-      // Validate
-      if (!id || !data) {
-        alert("Please enter ID and Data");
-        return;
-      }
-      if (!/^[0-9a-fA-F]+$/.test(id)) {
-        alert("ID must be a hexadecimal number");
-        return;
-      }
-      const idValue = parseInt(id, 16);
-      if (model == "0" && idValue > 0x7FF) {
-        alert("Standard ID must be 11-bit (max: 0x7FF)");
-        return;
-      }
-      if (model == "1" && idValue > 0x1FFFFFFF) {
-        alert("Extended ID must be 29-bit (max: 0x1FFFFFFF)");
-        return;
-      }
-
-      // Xóa bản ghi cũ (dựa vào id cũ, model cũ, data cũ, description cũ)
-      // Lấy thông tin cũ từ dataset của tr
-      const old = {
-        model: tr.dataset.model,
-        id: tr.dataset.id,
-        data: tr.dataset.data,
-        description: tr.dataset.description
-      };
-      await fetch('/delete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(old)
-      });
-
-      // Thêm bản ghi mới
-      await fetch('/add', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model, id, data, description, cyclics, baudrate })
-      });
-
-      loadTable();
-    }
-
-    async function deleteRow(btn) {
-    const tr = btn.parentElement.parentElement;
-    // Lấy dữ liệu từ dataset để đảm bảo đúng thông tin
-    const model = tr.dataset.model;
-    const id = tr.dataset.id;
-    const data = tr.dataset.data;
-    const description = tr.dataset.description;
-
-    await fetch('/delete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model, id, data, description })
-    });
-    // Xóa dòng khỏi bảng
-    tr.remove();
-    // Reload lại bảng để đồng bộ với file XML
-    loadTable();
-}
-
-async function deleteAll() {
-    if (confirm("Are you sure you want to delete all frames?")) {
-        await fetch('/delete_all', { method: 'POST' });
-        loadTable();
-    }
-}
-
-document.getElementById('exportBtn').onclick = function() {
-    window.location.href = '/export_xml';
-};
-
-document.getElementById('importBtn').onclick = function() {
-    document.getElementById('importInput').click();
-};
-
-document.getElementById('importInput').onchange = function(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-    const formData = new FormData();
-    formData.append('file', file);
-    fetch('/import_xml', {
-        method: 'POST',
-        body: formData
-    }).then(res => res.json())
-      .then(data => {
-        alert(data.status || data.error);
-        loadTable(); // Thêm dòng này để reload dữ liệu sau khi import
-      });
-};
-
-let isConnected = false;
-
-document.getElementById('connectBtn').onclick = async function() {
-    const btn = document.getElementById('connectBtn');
-    const status = document.getElementById('connectStatus');
-    if (!isConnected) {
-        // Connect
-        const port = document.getElementById('serialPort').value;
-        const baudrate = document.getElementById('baudrate').value;
-        status.textContent = 'Connecting...';
-        status.style.color = 'orange';
-        const res = await fetch('/connect_serial', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ port, baudrate })
-        });
-        const data = await res.json();
-        if (data.status === 'connected') {
-            status.textContent = 'Connected';
-            status.style.color = 'green';
-            btn.textContent = 'Disconnect';
-            isConnected = true;
-        } else {
-            status.textContent = 'Failed: ' + (data.message || '');
-            status.style.color = 'red';
-            isConnected = false;
+    <script>
+        // Map id to description for received table
+        function getDescriptionById(id) {
+            // Lấy tất cả các dòng gửi để ánh xạ description
+            const rows = document.querySelectorAll("#tableBody tr");
+            for (const row of rows) {
+                if (row.dataset.id && row.dataset.id.toLowerCase() === id.toLowerCase()) {
+                    return row.dataset.description || "";
+                }
+            }
+            return "";
         }
-    } else {
-        // Disconnect
-        status.textContent = 'Disconnecting...';
-        status.style.color = 'orange';
-        const res = await fetch('/disconnect_serial', { method: 'POST' });
-        const data = await res.json();
-        if (data.status === 'disconnected') {
-            status.textContent = 'Disconnected';
-            status.style.color = 'gray';
-            btn.textContent = 'Connect';
-            isConnected = false;
-        } else {
-            status.textContent = 'Failed: ' + (data.message || '');
-            status.style.color = 'red';
-        }
-    }
-};
 
-window.onload = function() {
-  loadTable();
-};
-  </script>
+        // Hàm cập nhật bảng nhận dữ liệu
+        async function loadReceiveTable() {
+            try {
+                const res = await fetch('/get_received_data');
+                const data = await res.json();
+                const tbody = document.getElementById('receiveTableBody');
+                tbody.innerHTML = '';
+                data.forEach(row => {
+                    const tr = document.createElement('tr');
+                    const description = getDescriptionById(row.id);
+                    tr.innerHTML = `
+                        <td>${row.id}</td>
+                        <td>${row.model || 'Std'}</td>
+                        <td>${row.data}</td>
+                        <td>${description}</td>
+                        <td>${row.timestamp}</td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            } catch (error) {
+                console.error("Failed to load received data:", error);
+            }
+        }
+
+        // Gọi loadReceiveTable định kỳ mỗi 1 giây
+        setInterval(loadReceiveTable, 1000);
+
+        async function addRow() {
+            const model = document.getElementById("model").value;
+            const id = document.getElementById("id").value.trim();
+            const data = document.getElementById("data").value.trim();
+            const description = document.getElementById("description").value.trim();
+            const baudrate = document.getElementById("baudrate").value;
+            const cyclics = document.getElementById("cyclics").value;
+
+            if (!id || !data) {
+                alert("Please enter ID and Data");
+                return;
+            }
+
+            // Kiểm tra định dạng hex
+            if (!/^[0-9a-fA-F]+$/.test(id)) {
+                alert("ID must be a hexadecimal number");
+                return;
+            }
+
+            // Kiểm tra định dạng hex cho Data
+            if (!/^[0-9a-fA-F]+$/.test(data)) {
+                alert("Data must be a hexadecimal string");
+                return;
+            }
+            const idValue = parseInt(id, 16);
+
+            if (model == "0" && idValue > 0x7FF) {
+                alert("Standard ID must be 11-bit (max: 0x7FF)");
+                return;
+            }
+
+            if (model == "1" && idValue > 0x1FFFFFFF) {
+                alert("Extended ID must be 29-bit (max: 0x1FFFFFFF)");
+                return;
+            }
+
+            // Gửi request lên server và kiểm tra lỗi
+            const res = await fetch('/add', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ model, id, data, description, cyclics, baudrate })
+            });
+            const result = await res.json();
+            if (!res.ok) {
+                alert(result.error || "Add failed");
+                return;
+            }
+
+            loadTable();
+        }
+
+        async function sendRow(btn) {
+            const row = btn.parentElement.parentElement;
+            const model = parseInt(row.dataset.model);
+            const id = row.dataset.id;
+            const data = row.dataset.data;
+            const baudrate = parseInt(row.dataset.baudrate);
+            const cyclics = parseInt(row.dataset.cyclics);
+            console.log({ model, id, data, cyclics, baudrate }); // Kiểm tra giá trị trước khi gửi
+            await fetch('/send', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ model, id, data, cyclics, baudrate })
+            });
+        }
+
+        async function stopSend() {
+            await fetch('/stop');
+        }
+
+        function createRowHTML(row, isEdit = false) {
+            if (!isEdit) {
+                return `
+                    <td>${row.id}</td>
+                    <td>${row.data}</td>
+                    <td>${row.model == "1" ? "Extended" : "Standard"}</td>
+                    <td>${row.description || ""}</td>
+                    <td>${row.cyclics || ""}</td>
+                    <td>${row.baudrate || ""}</td>
+                    <td><button onclick="sendRow(this)">Send</button></td>
+                    <td><button onclick="deleteRow(this)">Delete</button></td>
+                    <td><button onclick="editRow(this)">Edit</button></td>
+                `;
+            } else {
+                return `
+                    <td><input value="${row.id}" style="width:60px"/></td>
+                    <td><input value="${row.data}" style="width:80px"/></td>
+                    <td>
+                        <select>
+                            <option value="0" ${row.model == "0" ? "selected" : ""}>Standard</option>
+                            <option value="1" ${row.model == "1" ? "selected" : ""}>Extended</option>
+                        </select>
+                    </td>
+                    <td><input value="${row.description || ""}" style="width:80px"/></td>
+                    <td><input type="number" value="${row.cyclics || ""}" style="width:60px"/></td>
+                    <td><input value="${row.baudrate || ""}" style="width:80px"/></td>
+                    <td></td>
+                    <td><button onclick="cancelEdit(this)">Cancel</button></td>
+                    <td><button onclick="saveEdit(this)">Save</button></td>
+                `;
+            }
+        }
+
+        async function loadTable() {
+            try {
+                const res = await fetch('/get_data');
+                const data = await res.json();
+                const tbody = document.getElementById('tableBody');
+                tbody.innerHTML = '';
+                data.forEach(row => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = createRowHTML(row);
+                    // Đặt dataset cho dòng khi tải từ server
+                    tr.dataset.model = row.model;
+                    tr.dataset.id = row.id;
+                    tr.dataset.data = row.data;
+                    tr.dataset.description = row.description || "";
+                    tr.dataset.baudrate = row.baudrate || "";
+                    tr.dataset.cyclics = row.cyclics || "";
+                    tbody.appendChild(tr);
+                });
+            } catch (error) {
+                console.error("Failed to load table data:", error);
+            }
+        }
+
+        // Thêm hàm editRow, cancelEdit, saveEdit
+        function editRow(btn) {
+            const tr = btn.parentElement.parentElement;
+            const row = {
+                id: tr.dataset.id,
+                data: tr.dataset.data,
+                model: tr.dataset.model,
+                description: tr.dataset.description,
+                cyclics: tr.dataset.cyclics,
+                baudrate: tr.dataset.baudrate
+            };
+            tr.innerHTML = createRowHTML(row, true);
+        }
+
+        function cancelEdit(btn) {
+            loadTable();
+        }
+
+        async function saveEdit(btn) {
+            const tr = btn.parentElement.parentElement;
+            const tds = tr.children;
+            const id = tds[0].querySelector('input').value.trim();
+            const data = tds[1].querySelector('input').value.trim();
+            const model = tds[2].querySelector('select').value;
+            const description = tds[3].querySelector('input').value.trim();
+            const cyclics = tds[4].querySelector('input').value.trim();
+            const baudrate = tds[5].querySelector('input').value.trim();
+
+            // Validate
+            if (!id || !data) {
+                alert("Please enter ID and Data");
+                return;
+            }
+            if (!/^[0-9a-fA-F]+$/.test(id)) {
+                alert("ID must be a hexadecimal number");
+                return;
+            }
+            const idValue = parseInt(id, 16);
+            if (model == "0" && idValue > 0x7FF) {
+                alert("Standard ID must be 11-bit (max: 0x7FF)");
+                return;
+            }
+            if (model == "1" && idValue > 0x1FFFFFFF) {
+                alert("Extended ID must be 29-bit (max: 0x1FFFFFFF)");
+                return;
+            }
+
+            // Xóa bản ghi cũ (dựa vào id cũ, model cũ, data cũ, description cũ)
+            const old = {
+                model: tr.dataset.model,
+                id: tr.dataset.id,
+                data: tr.dataset.data,
+                description: tr.dataset.description
+            };
+            await fetch('/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(old)
+            });
+
+            // Thêm bản ghi mới
+            await fetch('/add', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ model, id, data, description, cyclics, baudrate })
+            });
+
+            loadTable();
+        }
+
+        async function deleteRow(btn) {
+            const tr = btn.parentElement.parentElement;
+            // Lấy dữ liệu từ dataset
+            const model = tr.dataset.model;
+            const id = tr.dataset.id;
+            const data = tr.dataset.data;
+            const description = tr.dataset.description;
+
+            await fetch('/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ model, id, data, description })
+            });
+            // Xóa dòng khỏi bảng
+            tr.remove();
+        }
+
+        async function deleteAll() {
+            if (confirm("Are you sure you want to delete all frames?")) {
+                await fetch('/delete_all', { method: 'POST' });
+                loadTable();
+            }
+        }
+
+        document.getElementById('exportBtn').onclick = function() {
+            window.location.href = '/export_xml';
+        };
+
+        document.getElementById('importBtn').onclick = function() {
+            document.getElementById('importInput').click();
+        };
+
+        document.getElementById('importInput').onchange = function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const formData = new FormData();
+            formData.append('file', file);
+            fetch('/import_xml', {
+                method: 'POST',
+                body: formData
+            }).then(res => res.json())
+              .then(data => {
+                alert(data.status || data.error);
+                loadTable(); // Thêm dòng này để reload dữ liệu sau khi import
+              })
+              .catch(error => {
+                console.error("Error importing XML:", error);
+                alert("Error importing XML file.");
+              });
+        };
+
+        let isConnected = false;
+
+        document.getElementById('connectBtn').onclick = async function() {
+            const btn = document.getElementById('connectBtn');
+            const status = document.getElementById('connectStatus');
+            if (!isConnected) {
+                // Connect
+                const port = document.getElementById('serialPort').value;
+                // Luôn dùng baudrate 115200
+                const baudrate = 9600;
+                status.textContent = 'Connecting...';
+                status.style.color = 'orange';
+                try {
+                    const res = await fetch('/connect_serial', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ port, baudrate })
+                    });
+                    const data = await res.json();
+                    if (data.status === 'connected') {
+                        status.textContent = 'Connected';
+                        status.style.color = 'green';
+                        btn.textContent = 'Disconnect';
+                        isConnected = true;
+                    } else {
+                        status.textContent = 'Failed: ' + (data.message || 'Unknown error');
+                        status.style.color = 'red';
+                        isConnected = false;
+                    }
+                } catch (error) {
+                    console.error("Connection error:", error);
+                    status.textContent = 'Failed: Network or server error';
+                    status.style.color = 'red';
+                    isConnected = false;
+                }
+            } else {
+                // Disconnect
+                status.textContent = 'Disconnecting...';
+                status.style.color = 'orange';
+                try {
+                    const res = await fetch('/disconnect_serial', { method: 'POST' });
+                    const data = await res.json();
+                    if (data.status === 'disconnected') {
+                        status.textContent = 'Disconnected';
+                        status.style.color = 'gray';
+                        btn.textContent = 'Connect';
+                        isConnected = false;
+                    } else {
+                        status.textContent = 'Failed: ' + (data.message || 'Unknown error');
+                        status.style.color = 'red';
+                    }
+                } catch (error) {
+                    console.error("Disconnection error:", error);
+                    status.textContent = 'Failed: Network or server error';
+                    status.style.color = 'red';
+                }
+            }
+        };
+
+        // Gọi hàm khi trang load xong
+        window.onload = function() {
+            loadTable(); // Tải bảng gửi từ XML_FILE
+            loadReceiveTable(); // Tải bảng nhận dữ liệu
+        };
+    </script>
 </body>
 </html>
