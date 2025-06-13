@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify, send_from_directory, send_file, render_template
 import serial
 import threading
-import time
+import time 
 import xml.etree.ElementTree as ET
 import os
 import queue
@@ -16,7 +16,7 @@ send_thread = None
 receive_queue = queue.Queue(maxsize=1000)  # Giới hạn tối đa 1000 frame
 from serial.tools import list_ports
 print([p.device for p in list_ports.comports()])
-
+# Đường dẫn tới file XML
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 XML_FILE = os.path.join(BASE_DIR, 'can_data1.xml')
 
@@ -35,13 +35,17 @@ def serial_receive_thread():
                             id_str = match.group(1)  # Lấy ID không có 0x
                             model = match.group(2)    # Std hoặc Ext
                             data_str = match.group(3).strip()
-                            timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
+                            # timestamp dạng string
+                            timestamp_str = time.strftime('%Y-%m-%d %H:%M:%S')
+                            # unixtimestamp (giây)
+                            unix_ts = int(time.time())
                             # Định dạng lại dữ liệu trước khi đưa vào queue
                             receive_queue.put({
+                                'timestamp': timestamp_str,
+                                'unixtimestamp': unix_ts,
                                 'id': id_str,
-                                'model': model,
                                 'data': data_str, 
-                                'timestamp': timestamp
+                                'model': model
                             })
                     except Exception as e:
                         print(f"Parse error: {e}")
@@ -82,9 +86,11 @@ def get_received_data():
 
     # Thêm Description vào từng frame dựa theo id
     for f in frames:
-        f_id = f['id'].upper()
-        f['description'] = desc_map.get(f_id, "")
-
+        # Chuẩn hóa ID: loại bỏ số 0 ở đầu và chuyển về in hoa
+        normalized_id = f['id'].lstrip('0').upper()
+        if normalized_id == '':
+            normalized_id = '0'
+        f['description'] = desc_map.get(normalized_id, "")
     return jsonify(frames)
 
 def encode_uart_frame(model, id_str, data_str, cyclics):
@@ -169,7 +175,7 @@ def send():
         if ser is None or not ser.is_open or ser.baudrate != baudrate:
             if ser:
                 ser.close()
-            ser = serial.Serial('COM7', baudrate = baudrate, timeout=1)
+            ser = serial.Serial('com16', baudrate = baudrate, timeout=1)
 
         ser.write(frame)
 
@@ -292,7 +298,7 @@ from serial.tools import list_ports
 def connect_serial():
     global ser
     data = request.json
-    port = data.get('port', 'COM7')
+    port = data.get('port', 'com16')
     baudrate = int(data.get('baudrate', 115200))
     print(f"Trying to connect to port: {port} with baudrate: {baudrate}")
 
