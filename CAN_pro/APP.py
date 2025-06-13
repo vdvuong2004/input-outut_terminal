@@ -3,6 +3,7 @@ import serial
 import threading
 import time 
 import xml.etree.ElementTree as ET
+from datetime import datetime
 import os
 import queue
 import re
@@ -34,11 +35,11 @@ def serial_receive_thread():
                         if match:
                             id_str = match.group(1)  # Lấy ID không có 0x
                             model = match.group(2)    # Std hoặc Ext
-                            data_str = match.group(3).strip()
+                            data_str = match.group(3).replace(" ", "").strip()  # Lấy dữ liệu, loại bỏ khoảng trắng
                             # timestamp dạng string
-                            timestamp_str = time.strftime('%Y-%m-%d %H:%M:%S')
-                            # unixtimestamp (giây)
-                            unix_ts = int(time.time())
+                            now = datetime.now()
+                            timestamp_str = now.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]  # lấy đến mili giây
+                            unix_ts = round(now.timestamp() * 1000)  # đơn vị: mili giây
                             # Định dạng lại dữ liệu trước khi đưa vào queue
                             receive_queue.put({
                                 'timestamp': timestamp_str,
