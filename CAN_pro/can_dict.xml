@@ -1,6 +1,12 @@
 <?xml version='1.0' encoding='utf-8'?>
 <CANData>
-  <Frame><ID>122</ID><Description>Speed</Description></Frame>
-  <Frame><ID>123</ID><Description>RPM</Description></Frame>
-  <Frame><ID>124</ID><Description>Temperature</Description></Frame>
+  <Frame><ID>001</ID><Description>Speed</Description></Frame>
+  <Frame><ID>002</ID><Description>RPM</Description></Frame>
+  <Frame><ID>003</ID><Description>Temperature</Description></Frame>
+  <Frame><ID>004</ID><Description>Voltage</Description></Frame>
+  <Frame><ID>ABCDEF</ID><Description>Current</Description></Frame>
+  <Frame><ID>ABACAD</ID><Description>Power</Description></Frame>
+  <Frame><ID>01A</ID><Description>Power</Description></Frame>
+  <Frame><ID>02B</ID><Description>Torque</Description></Frame>
+  <Frame><ID>03C</ID><Description>Distance</Description></Frame>
 </CANData>

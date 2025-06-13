@@ -30,6 +30,8 @@ def serial_receive_thread():
                 line = ser.readline()
                 if line:
                     try:
+                        print("Bytes nhận được:", list(line))  # Log từng byte dạng số nguyên
+                        print("Hex nhận được:", line.hex())    # Log dạng hex
                         decoded = line.decode(errors='ignore').strip()
                         match = re.match(r'ID:\s*0x([0-9A-Fa-f]+)\s*\[(Std|Ext)\],\s*Data:\s*([\dA-Fa-f\s]+)', decoded)
                         if match:
@@ -64,6 +66,9 @@ def start_receive_thread():
         t.start()
         app.thread_started = True
 
+def normalize_id(id_str):
+    return id_str.upper().replace("0X", "").zfill(3)
+
 @app.route('/get_received_data')
 def get_received_data():
     # Lấy đường dẫn tuyệt đối tới file can_dict.xml
@@ -78,7 +83,7 @@ def get_received_data():
         for frame in root.findall('Frame'):
             id_val = frame.find('ID').text.strip()
             desc = frame.find('Description').text if frame.find('Description') is not None else ""
-            desc_map[id_val.upper()] = desc
+            desc_map[normalize_id(id_val)] = desc
     except Exception as e:
         print("Lỗi khi đọc can_dict.xml:", e)
 
@@ -87,10 +92,9 @@ def get_received_data():
 
     # Thêm Description vào từng frame dựa theo id
     for f in frames:
-        # Chuẩn hóa ID: loại bỏ số 0 ở đầu và chuyển về in hoa
-        normalized_id = f['id'].lstrip('0').upper()
-        if normalized_id == '':
-            normalized_id = '0'
+        normalized_id = normalize_id(f['id'])
+        # print(f"Nhận được ID: {f['id']} -> Chuẩn hóa: {normalized_id}")
+        # print(f"desc_map keys: {list(desc_map.keys())}")
         f['description'] = desc_map.get(normalized_id, "")
     return jsonify(frames)
 
@@ -107,6 +111,9 @@ def encode_uart_frame(model, id_str, data_str, cyclics):
     id_bytes = id_val.to_bytes(4, 'big') if model else id_val.to_bytes(2, 'big')
     # data_bytes = data_str.encode('utf-8')
     # Chuyển data thành bytes (hex)
+    # Nếu số ký tự lẻ, thêm '0' vào đầu
+    if len(data_str) % 2 == 1:
+        data_str = '0' + data_str
     try:
         data_bytes = bytes.fromhex(data_str)
     except Exception:
@@ -172,13 +179,19 @@ def send():
 
         frame = encode_uart_frame(model, id_str, data_str, cyclics)
         print("Frame to send:", frame)
+        
 
         if ser is None or not ser.is_open or ser.baudrate != baudrate:
             if ser:
                 ser.close()
-            ser = serial.Serial('com16', baudrate = baudrate, timeout=1)
+            ser = serial.Serial('COM7', baudrate = baudrate, timeout=1)
 
+        
         ser.write(frame)
+        send_time = round(time.time() * 1000)  # unixtimestamp đến ms
+        print(f"Gửi frame lúc unixtimestamp (ms): {send_time}")
+
+        
 
         return jsonify({'status': 'sent'})
     except Exception as e:
@@ -186,9 +199,7 @@ def send():
         return jsonify({'error': str(e)}), 500
 
 def normalize_id(id_str):
-    # Loại bỏ "0x" nếu có, chuyển về chữ hoa, đủ 3 ký tự
-    id_str = id_str.upper().replace("0X", "")
-    return id_str.zfill(3)
+    return id_str.upper().replace("0X", "").zfill(3)
 
 @app.route('/add', methods=['POST'])
 def save_to_xml(filename=XML_FILE):
@@ -211,9 +222,8 @@ def save_to_xml(filename=XML_FILE):
 
     frame = ET.SubElement(root, 'Frame')
     ET.SubElement(frame, 'Model').text = str(data['model'])
-    ET.SubElement(frame, 'ID').text = new_id
+    ET.SubElement(frame, 'ID').text = normalize_id(data['id'])
     ET.SubElement(frame, 'Data').text = data['data']
-    ET.SubElement(frame, 'Description').text = data.get('description', '')
     ET.SubElement(frame, 'Cyclics').text = str(data['cyclics'])
     ET.SubElement(frame, 'Baudrate').text = str(data['baudrate'])
 
@@ -232,7 +242,6 @@ def get_data():
                 'id': frame.find('ID').text,
                 'data': frame.find('Data').text,
                 'model': frame.find('Model').text,
-                'description': frame.find('Description').text if frame.find('Description') is not None else '',
                 'cyclics': frame.find('Cyclics').text if frame.find('Cyclics') is not None else '',
                 'baudrate': frame.find('Baudrate').text if frame.find('Baudrate') is not None else ''
             }
@@ -301,7 +310,7 @@ from serial.tools import list_ports
 def connect_serial():
     global ser
     data = request.json
-    port = data.get('port', 'com16')
+    port = data.get('port', 'COM7')
     baudrate = int(data.get('baudrate', 115200))
     print(f"Trying to connect to port: {port} with baudrate: {baudrate}")
 

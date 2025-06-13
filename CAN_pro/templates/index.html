@@ -103,9 +103,6 @@
     <label>Data:</label>
     <input type="text" id="data" placeholder="hello">
 
-    <label>Description:</label>
-    <input type="text" id="description" placeholder="Description">
-
     <label>Model:</label>
     <select id="model">
         <option value="0">Standard</option>
@@ -114,6 +111,7 @@
 
     <label>Serial Port:</label>
     <input type="text" id="serialPort" value="COM" style="width:70px">
+
     <label>Baudrate:</label>
     <select id="baudrate">
         <option value="9600">9600</option>
@@ -138,7 +136,6 @@
                 <th>ID</th>
                 <th>Data</th>
                 <th>Model</th>
-                <th>Description</th>
                 <th>Cyclics</th>
                 <th>Baudrate</th>
                 <th>Send</th>
@@ -208,7 +205,6 @@
             const model = document.getElementById("model").value;
             const id = document.getElementById("id").value.trim();
             const data = document.getElementById("data").value.trim();
-            const description = document.getElementById("description").value.trim();
             const baudrate = document.getElementById("baudrate").value;
             const cyclics = document.getElementById("cyclics").value;
 
@@ -244,7 +240,7 @@
             const res = await fetch('/add', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ model, id, data, description, cyclics, baudrate })
+                body: JSON.stringify({ model, id, data, cyclics, baudrate })
             });
             const result = await res.json();
             if (!res.ok) {
@@ -280,7 +276,6 @@
                     <td>${row.id}</td>
                     <td>${row.data}</td>
                     <td>${row.model == "1" ? "Extended" : "Standard"}</td>
-                    <td>${row.description || ""}</td>
                     <td>${row.cyclics || ""}</td>
                     <td>${row.baudrate || ""}</td>
                     <td><button onclick="sendRow(this)">Send</button></td>
@@ -297,7 +292,6 @@
                             <option value="1" ${row.model == "1" ? "selected" : ""}>Extended</option>
                         </select>
                     </td>
-                    <td><input value="${row.description || ""}" style="width:80px"/></td>
                     <td><input type="number" value="${row.cyclics || ""}" style="width:60px"/></td>
                     <td><input value="${row.baudrate || ""}" style="width:80px"/></td>
                     <td></td>
@@ -350,21 +344,24 @@
 
         async function saveEdit(btn) {
             const tr = btn.parentElement.parentElement;
-            const tds = tr.children;
-            const id = tds[0].querySelector('input').value.trim();
-            const data = tds[1].querySelector('input').value.trim();
-            const model = tds[2].querySelector('select').value;
-            const description = tds[3].querySelector('input').value.trim();
-            const cyclics = tds[4].querySelector('input').value.trim();
-            const baudrate = tds[5].querySelector('input').value.trim();
+            const inputs = tr.querySelectorAll('input, select');
+            const id = inputs[0].value.trim();
+            const data = inputs[1].value.trim();
+            const model = inputs[2].value;
+            const cyclics = inputs[3].value;
+            const baudrate = inputs[4].value;
 
-            // Validate
+            // Kiểm tra hợp lệ
             if (!id || !data) {
                 alert("Please enter ID and Data");
                 return;
             }
             if (!/^[0-9a-fA-F]+$/.test(id)) {
                 alert("ID must be a hexadecimal number");
+                return;
+            }
+            if (!/^[0-9a-fA-F]+$/.test(data)) {
+                alert("Data must be a hexadecimal string");
                 return;
             }
             const idValue = parseInt(id, 16);
@@ -377,12 +374,13 @@
                 return;
             }
 
-            // Xóa bản ghi cũ (dựa vào id cũ, model cũ, data cũ, description cũ)
+            // Xóa bản ghi cũ
             const old = {
                 model: tr.dataset.model,
                 id: tr.dataset.id,
                 data: tr.dataset.data,
-                description: tr.dataset.description
+                cyclics: tr.dataset.cyclics,
+                baudrate: tr.dataset.baudrate
             };
             await fetch('/delete', {
                 method: 'POST',
@@ -391,12 +389,17 @@
             });
 
             // Thêm bản ghi mới
-            await fetch('/add', {
+            const res = await fetch('/add', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ model, id, data, description, cyclics, baudrate })
+                body: JSON.stringify({ model, id, data, cyclics, baudrate })
             });
-
+            const result = await res.json();
+            if (!res.ok) {
+                alert(result.error || "Edit failed");
+                loadTable();
+                return;
+            }
             loadTable();
         }
 
@@ -459,8 +462,7 @@
             if (!isConnected) {
                 // Connect
                 const port = document.getElementById('serialPort').value;
-                // Luôn dùng baudrate 115200
-                const baudrate = 9600;
+                const baudrate = document.getElementById('baudrate').value;
                 status.textContent = 'Connecting...';
                 status.style.color = 'orange';
                 try {
