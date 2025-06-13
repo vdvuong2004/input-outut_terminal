@@ -185,11 +185,14 @@ def send():
         print("Send error:", e)
         return jsonify({'error': str(e)}), 500
 
+def normalize_id(id_str):
+    # Loại bỏ "0x" nếu có, chuyển về chữ hoa, đủ 3 ký tự
+    id_str = id_str.upper().replace("0X", "")
+    return id_str.zfill(3)
+
 @app.route('/add', methods=['POST'])
 def save_to_xml(filename=XML_FILE):
     data = request.json
-
-    # Nếu file đã tồn tại, đọc và thêm Frame mới
     try:
         tree = ET.parse(filename)
         root = tree.getroot()
@@ -197,14 +200,18 @@ def save_to_xml(filename=XML_FILE):
         root = ET.Element('CANData')
         tree = ET.ElementTree(root)
 
-    # Kiểm tra trùng IDAdd commentMore actions
+    # Chuẩn hóa ID mới
+    new_id = normalize_id(data['id'])
+
+    # Kiểm tra trùng ID
     for frame in root.findall('Frame'):
-        if frame.find('ID').text == data['id']:
+        frame_id = normalize_id(frame.find('ID').text)
+        if frame_id == new_id:
             return jsonify({'error': 'ID already exists'}), 400
 
     frame = ET.SubElement(root, 'Frame')
     ET.SubElement(frame, 'Model').text = str(data['model'])
-    ET.SubElement(frame, 'ID').text = data['id']
+    ET.SubElement(frame, 'ID').text = new_id
     ET.SubElement(frame, 'Data').text = data['data']
     ET.SubElement(frame, 'Description').text = data.get('description', '')
     ET.SubElement(frame, 'Cyclics').text = str(data['cyclics'])
@@ -235,33 +242,28 @@ def get_data():
         return jsonify([])
 
 @app.route('/delete', methods=['POST'])
-def delete_from_xml():
-    filename = XML_FILE
-    req = request.json
-    id_to_delete = req.get('id')
-    model_to_delete = str(req.get('model'))
-    data_to_delete = req.get('data')
-    description_to_delete = req.get('description', '')
-
+def delete():
+    data = request.json
     try:
-        tree = ET.parse(filename)
+        tree = ET.parse(XML_FILE)
         root = tree.getroot()
-        removed = False
-        for frame in root.findall('Frame'):
-            if (frame.find('ID').text == id_to_delete and
-                frame.find('Model').text == model_to_delete and
-                frame.find('Data').text == data_to_delete and
-                (frame.find('Description').text if frame.find('Description') is not None else '') == description_to_delete):
-                root.remove(frame)
-                removed = True
-                break
-        if removed:
-            tree.write(filename, encoding='utf-8', xml_declaration=True)
-            return jsonify({'status': 'deleted'})
-        else:
-            return jsonify({'status': 'not found'}), 404
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 500
+    except (FileNotFoundError, ET.ParseError):
+        return jsonify({'error': 'File not found'}), 400
+
+    del_id = normalize_id(data['id'])
+    found = False
+    for frame in root.findall('Frame'):
+        frame_id = normalize_id(frame.find('ID').text)
+        if frame_id == del_id:
+            root.remove(frame)
+            found = True
+            break
+
+    if found:
+        tree.write(XML_FILE, encoding='utf-8', xml_declaration=True)
+        return jsonify({'status': 'deleted'})
+    else:
+        return jsonify({'error': 'Frame not found'}), 404
 
 @app.route('/delete_all', methods=['POST'])
 def delete_all():
